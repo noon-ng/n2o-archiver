@@ -45,14 +45,35 @@ TEST_OBJECTS = $(patsubst %.m,build/obj/%.o,$(TEST_SOURCES)) \
                $(patsubst %.m,build/obj/%.o,$(APP_SOURCES_NO_MAIN))
 TEST_BIN     = build/N2OArchiverTests
 
-.PHONY: all clean run test
+# Icon generation
+ICON_SRC      = N2OArchiver/Resources/AppIcon.svg
+ICONSET_DIR   = build/icon.iconset
+ICON_ICNS     = $(BUNDLE)/Contents/Resources/AppIcon.icns
+
+ICON_SIZES = 16 32 128 256 512
+
+.PHONY: all clean run test icons
 
 all: $(BUNDLE)
 
-$(BUNDLE): $(EXECUTABLE) N2OArchiver/Info.plist
+icons: $(ICON_ICNS)
+
+$(ICONSET_DIR): $(ICON_SRC)
+	@mkdir -p $(ICONSET_DIR)
+	@for size in $(ICON_SIZES); do \
+		out1="icon_$${size}x$${size}.png"; \
+		out2="icon_$${size}x$${size}@2x.png"; \
+		rsvg-convert -w $$size -h $$size -f png $(ICON_SRC) > $(ICONSET_DIR)/$$out1; \
+		rsvg-convert -w $$((size * 2)) -h $$((size * 2)) -f png $(ICON_SRC) > $(ICONSET_DIR)/$$out2; \
+	done
+
+$(ICON_ICNS): $(ICONSET_DIR)
+	@mkdir -p $(dir $@)
+	iconutil -c icns $< -o $@
+
+$(BUNDLE): $(EXECUTABLE) N2OArchiver/Info.plist icons
 	@cp N2OArchiver/Info.plist $(BUNDLE)/Contents/Info.plist
 	@mkdir -p $(BUNDLE)/Contents/PlugIns
-	@mkdir -p $(BUNDLE)/Contents/Resources
 	@echo "Built $(BUNDLE)"
 
 $(EXECUTABLE): $(OBJECTS)
