@@ -50,6 +50,10 @@ targets:
           - "NAPluginManagerTests.m"
           - "NAExtractionWindowControllerTests.m"
           - "AppDelegateTests.m"
+          - "Fixtures"
+      - path: Tests/Fixtures
+        type: folder
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: sh.n2o.archiver.tests

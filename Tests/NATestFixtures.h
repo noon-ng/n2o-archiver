@@ -1,7 +1,8 @@
 #import <Foundation/Foundation.h>
 
-// Creates sample archives in a temporary directory for testing.
-// Call +setUp to create, +tearDown to clean up, +fixtureDir for the path.
+// Provides paths to static test archives checked into Tests/Fixtures/.
+// +setUp copies them to a temporary directory so tests can extract alongside
+// without polluting the source tree. +tearDown removes the temporary copy.
 @interface NATestFixtures : NSObject
 
 + (void)setUp;
