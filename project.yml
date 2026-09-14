@@ -1,0 +1,37 @@
+name: NoonArchiver
+options:
+  deploymentTarget:
+    macOS: "13.0"
+  xcodeVersion: "16.0"
+  generateEmptyDirectories: false
+
+settings:
+  base:
+    CLANG_ENABLE_OBJC_ARC: YES
+    MACOSX_DEPLOYMENT_TARGET: "13.0"
+
+targets:
+  NoonArchiver:
+    type: application
+    platform: macOS
+    sources:
+      - path: NoonArchiver
+        excludes:
+          - "*.xcassets"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.noonarchiver.app
+        INFOPLIST_FILE: NoonArchiver/Info.plist
+        HEADER_SEARCH_PATHS:
+          - "$(SRCROOT)/NoonArchiver"
+          - "/opt/homebrew/opt/libarchive/include"
+        LIBRARY_SEARCH_PATHS:
+          - "/opt/homebrew/opt/libarchive/lib"
+        OTHER_LDFLAGS:
+          - "-larchive"
+        CLANG_ENABLE_MODULES: YES
+        GENERATE_INFOPLIST_FILE: NO
+    dependencies: []
+    scheme:
+      testTargets: []
+      commandLineArguments: {}
