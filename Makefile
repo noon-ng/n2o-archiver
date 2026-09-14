@@ -52,7 +52,7 @@ ICON_ICNS     = $(BUNDLE)/Contents/Resources/AppIcon.icns
 
 ICON_SIZES = 16 32 128 256 512
 
-.PHONY: all clean run test icons
+.PHONY: all clean run test icons install uninstall
 
 all: $(BUNDLE)
 
@@ -93,6 +93,14 @@ test: $(TEST_BIN)
 $(TEST_BIN): $(TEST_OBJECTS)
 	@mkdir -p $(dir $@)
 	$(CC) $(LDFLAGS) -o $@ $(TEST_OBJECTS)
+
+install: $(BUNDLE)
+	sudo cp -Rf $(BUNDLE) /Applications/
+	@echo "Installed $(APP_NAME) to /Applications/"
+
+uninstall:
+	sudo rm -rf /Applications/$(APP_NAME).app
+	@echo "Removed $(APP_NAME) from /Applications/"
 
 clean:
 	rm -rf build
