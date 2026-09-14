@@ -33,5 +33,35 @@ targets:
         GENERATE_INFOPLIST_FILE: NO
     dependencies: []
     scheme:
-      testTargets: []
+      testTargets:
+        - N2OArchiverTests
       commandLineArguments: {}
+
+  N2OArchiverTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests
+        excludes:
+          - "main.m"
+          - "NATestCase.h"
+          - "NATestCase.m"
+          - "NALibarchiveExtractorTests.m"
+          - "NAPluginManagerTests.m"
+          - "NAExtractionWindowControllerTests.m"
+          - "AppDelegateTests.m"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: sh.n2o.archiver.tests
+        HEADER_SEARCH_PATHS:
+          - "$(SRCROOT)/N2OArchiver"
+          - "$(SRCROOT)/Tests"
+          - "/opt/homebrew/opt/libarchive/include"
+        LIBRARY_SEARCH_PATHS:
+          - "/opt/homebrew/opt/libarchive/lib"
+        OTHER_LDFLAGS:
+          - "-larchive"
+        CLANG_ENABLE_MODULES: YES
+        GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - target: N2OArchiver
