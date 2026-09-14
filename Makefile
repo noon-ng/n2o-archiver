@@ -14,7 +14,8 @@ CFLAGS = -fobjc-arc \
          $(MIN_OS) \
          -Wall -Wextra -Wno-unused-parameter \
          -I$(LIBARCHIVE_PREFIX)/include \
-         -IN2OArchiver
+         -IN2OArchiver \
+         -ITests
 
 LDFLAGS = $(ARCH) $(MIN_OS) \
           -L$(LIBARCHIVE_PREFIX)/lib \
@@ -30,7 +31,18 @@ SOURCES = N2OArchiver/main.m \
 
 OBJECTS = $(patsubst %.m,build/obj/%.o,$(SOURCES))
 
-.PHONY: all clean run
+# Test sources — main.m #imports the test .m files directly, so only
+# these need to compile.  The app sources (minus main.m) are linked in.
+TEST_SOURCES = Tests/main.m \
+               Tests/NATestCase.m \
+               Tests/NATestFixtures.m
+
+APP_SOURCES_NO_MAIN = $(filter-out N2OArchiver/main.m,$(SOURCES))
+TEST_OBJECTS = $(patsubst %.m,build/obj/%.o,$(TEST_SOURCES)) \
+               $(patsubst %.m,build/obj/%.o,$(APP_SOURCES_NO_MAIN))
+TEST_BIN     = build/N2OArchiverTests
+
+.PHONY: all clean run test
 
 all: $(BUNDLE)
 
@@ -50,6 +62,13 @@ build/obj/%.o: %.m
 
 run: $(BUNDLE)
 	open $(BUNDLE)
+
+test: $(TEST_BIN)
+	./$(TEST_BIN)
+
+$(TEST_BIN): $(TEST_OBJECTS)
+	@mkdir -p $(dir $@)
+	$(CC) $(LDFLAGS) -o $@ $(TEST_OBJECTS)
 
 clean:
 	rm -rf build
