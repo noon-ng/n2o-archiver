@@ -50,6 +50,8 @@ targets:
           - "NAPluginManagerTests.m"
           - "NAExtractionWindowControllerTests.m"
           - "AppDelegateTests.m"
+          - "NA7zExtractorTests.m"
+          - "NARarExtractorTests.m"
           - "Fixtures"
       - path: Tests/Fixtures
         type: folder

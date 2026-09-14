@@ -2,6 +2,8 @@
 #import "NAPluginManager.h"
 #import "NAExtractionWindowController.h"
 #import "Plugins/NALibarchiveExtractor.h"
+#import "Plugins/NA7zExtractor.h"
+#import "Plugins/NARarExtractor.h"
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
 @interface AppDelegate ()
@@ -17,6 +19,8 @@
 
     // Register built-in extractors.
     [pm registerBuiltinClass:[NALibarchiveExtractor class]];
+    [pm registerBuiltinClass:[NA7zExtractor class]];
+    [pm registerBuiltinClass:[NARarExtractor class]];
 
     // Load external plugin bundles.
     [pm loadPlugins];

@@ -27,7 +27,10 @@ SOURCES = N2OArchiver/main.m \
           N2OArchiver/AppDelegate.m \
           N2OArchiver/NAPluginManager.m \
           N2OArchiver/NAExtractionWindowController.m \
-          N2OArchiver/Plugins/NALibarchiveExtractor.m
+          N2OArchiver/Plugins/NALibarchiveExtractor.m \
+          N2OArchiver/Plugins/NA7zzTool.m \
+          N2OArchiver/Plugins/NA7zExtractor.m \
+          N2OArchiver/Plugins/NARarExtractor.m
 
 OBJECTS = $(patsubst %.m,build/obj/%.o,$(SOURCES))
 

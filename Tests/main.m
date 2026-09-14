@@ -7,6 +7,8 @@
 #import "NAPluginManagerTests.m"
 #import "NAExtractionWindowControllerTests.m"
 #import "AppDelegateTests.m"
+#import "NA7zExtractorTests.m"
+#import "NARarExtractorTests.m"
 
 int main(int argc, const char *argv[]) {
     @autoreleasepool {
@@ -20,6 +22,8 @@ int main(int argc, const char *argv[]) {
         [NATestRunner registerTestClass:[NAPluginManagerTests class]];
         [NATestRunner registerTestClass:[NAExtractionWindowControllerTests class]];
         [NATestRunner registerTestClass:[AppDelegateTests class]];
+        [NATestRunner registerTestClass:[NA7zExtractorTests class]];
+        [NATestRunner registerTestClass:[NARarExtractorTests class]];
 
         int result = [NATestRunner runAllTests];
 
