@@ -126,31 +126,57 @@
 
 - (void)unwrapSingleItemDirectoryAtPath:(NSString *)destPath {
     NSFileManager *fm = [NSFileManager defaultManager];
-    NSError *error = nil;
-    NSArray<NSString *> *items =
-        [fm contentsOfDirectoryAtPath:destPath error:&error];
 
-    // Filter out hidden files (e.g. .DS_Store).
-    NSMutableArray<NSString *> *visible = [NSMutableArray array];
-    for (NSString *item in items) {
-        if (![item hasPrefix:@"."]) [visible addObject:item];
+    // Only unwrap when the destination holds exactly one item besides
+    // .DS_Store, so moved children can only collide with .DS_Store.
+    NSMutableArray<NSString *> *items = [NSMutableArray array];
+    for (NSString *item in [fm contentsOfDirectoryAtPath:destPath error:nil]) {
+        if (![item isEqualToString:@".DS_Store"]) [items addObject:item];
+    }
+    if (items.count != 1) return;
+
+    // attributesOfItemAtPath: does not follow symlinks, so a symlink to a
+    // directory elsewhere on disk is left alone.
+    NSString *singleItem = [destPath stringByAppendingPathComponent:items[0]];
+    NSDictionary *attrs = [fm attributesOfItemAtPath:singleItem error:nil];
+    if (![attrs.fileType isEqualToString:NSFileTypeDirectory]) return;
+
+    // Rename the directory first so a child with the same name (x/x) does not
+    // collide with it when moved up.
+    NSString *staging = [destPath stringByAppendingPathComponent:
+        [@".n2o-unwrap-" stringByAppendingString:NSUUID.UUID.UUIDString]];
+    if (![fm moveItemAtPath:singleItem toPath:staging error:nil]) return;
+
+    NSArray<NSString *> *children = [fm contentsOfDirectoryAtPath:staging error:nil];
+    NSMutableArray<NSString *> *moved = [NSMutableArray array];
+    BOOL failed = (children == nil);
+    for (NSString *child in children) {
+        if (![fm moveItemAtPath:[staging stringByAppendingPathComponent:child]
+                         toPath:[destPath stringByAppendingPathComponent:child]
+                          error:nil]) {
+            failed = YES;
+            break;
+        }
+        [moved addObject:child];
     }
 
-    if (visible.count != 1) return;
-
-    NSString *singleItem = [destPath stringByAppendingPathComponent:visible[0]];
-    BOOL isDir = NO;
-    if (![fm fileExistsAtPath:singleItem isDirectory:&isDir] || !isDir) return;
-
-    // Move inner contents up into destPath.
-    NSArray<NSString *> *inner =
-        [fm contentsOfDirectoryAtPath:singleItem error:nil];
-    for (NSString *child in inner) {
-        NSString *src = [singleItem stringByAppendingPathComponent:child];
-        NSString *dst = [destPath stringByAppendingPathComponent:child];
-        [fm moveItemAtPath:src toPath:dst error:nil];
+    if (failed) {
+        // Restore the original layout. Nothing is deleted on this path.
+        for (NSString *child in moved) {
+            [fm moveItemAtPath:[destPath stringByAppendingPathComponent:child]
+                        toPath:[staging stringByAppendingPathComponent:child]
+                         error:nil];
+        }
+        if (![fm moveItemAtPath:staging toPath:singleItem error:nil]) {
+            NSLog(@"N2OArchiver: could not restore %@ from %@", singleItem, staging);
+        }
+        return;
     }
-    [fm removeItemAtPath:singleItem error:nil];
+
+    // rmdir only removes an empty directory.
+    if (rmdir(staging.fileSystemRepresentation) != 0) {
+        NSLog(@"N2OArchiver: could not remove %@: %s", staging, strerror(errno));
+    }
 }
 
 #pragma mark - Error display
