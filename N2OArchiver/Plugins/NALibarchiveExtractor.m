@@ -35,10 +35,23 @@ static NSString *const NALibarchiveErrorDomain = @"sh.n2o.archiver.libarchive";
     archive_read_support_filter_all(a);
     archive_read_support_format_all(a);
 
-    int r = archive_read_open_filename(a, path.fileSystemRepresentation, 10240);
+    BOOL result = NO;
+    if (archive_read_open_filename(a, path.fileSystemRepresentation, 10240)
+        == ARCHIVE_OK) {
+        // mtree bids on most text files and "empty" on any zero-byte file, so
+        // a successful open alone does not indicate an archive. Reading the
+        // first header rejects text that is not a valid mtree spec; mtree and
+        // empty are then excluded explicitly.
+        struct archive_entry *entry;
+        int r = archive_read_next_header(a, &entry);
+        int format = archive_format(a) & ARCHIVE_FORMAT_BASE_MASK;
+        result = r >= ARCHIVE_WARN
+              && format != ARCHIVE_FORMAT_MTREE
+              && format != ARCHIVE_FORMAT_EMPTY;
+    }
     archive_read_free(a);
 
-    return (r == ARCHIVE_OK);
+    return result;
 }
 
 #pragma mark - NAExtractorPlugin (extraction)

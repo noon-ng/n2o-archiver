@@ -2,6 +2,8 @@
 #import "NATestFixtures.h"
 #import "NAPluginManager.h"
 #import "Plugins/NALibarchiveExtractor.h"
+#import "Plugins/NA7zExtractor.h"
+#import "Plugins/NARarExtractor.h"
 
 @interface NAPluginManagerTests : NATestCase
 @end
@@ -62,6 +64,35 @@
     NAAssertNotNil(ext, @"should find extractor via magic bytes even without extension");
 
     [[NSFileManager defaultManager] removeItemAtPath:noExt error:nil];
+}
+
+#pragma mark - Built-in routing
+
+- (void)testBuiltinRouting7zUses7zExtractor {
+    NAPluginManager *pm = [[NAPluginManager alloc] init];
+    [pm registerBuiltinExtractors];
+    id<NAExtractorPlugin> ext = [pm extractorForFileAtPath:
+        [NATestFixtures pathForFixture:@"test.7z"]];
+    NAAssertTrue([ext isKindOfClass:[NA7zExtractor class]],
+                 @".7z should route to NA7zExtractor, got %@", [ext class]);
+}
+
+- (void)testBuiltinRoutingRarUsesRarExtractor {
+    NAPluginManager *pm = [[NAPluginManager alloc] init];
+    [pm registerBuiltinExtractors];
+    id<NAExtractorPlugin> ext = [pm extractorForFileAtPath:
+        [NATestFixtures pathForFixture:@"test.rar"]];
+    NAAssertTrue([ext isKindOfClass:[NARarExtractor class]],
+                 @".rar should route to NARarExtractor, got %@", [ext class]);
+}
+
+- (void)testBuiltinRoutingZipUsesLibarchive {
+    NAPluginManager *pm = [[NAPluginManager alloc] init];
+    [pm registerBuiltinExtractors];
+    id<NAExtractorPlugin> ext = [pm extractorForFileAtPath:
+        [NATestFixtures pathForFixture:@"test.zip"]];
+    NAAssertTrue([ext isKindOfClass:[NALibarchiveExtractor class]],
+                 @".zip should route to NALibarchiveExtractor, got %@", [ext class]);
 }
 
 #pragma mark - No match

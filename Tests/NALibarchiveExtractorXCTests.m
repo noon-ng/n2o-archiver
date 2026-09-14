@@ -106,6 +106,23 @@
                     [NATestFixtures pathForFixture:@"corrupt.zip"]]);
 }
 
+- (void)testCanHandleRejectsPlainText {
+    NSString *path = [NATestFixtures pathForFixture:@"notes.txt"];
+    [@"hello\n" writeToFile:path atomically:NO
+                  encoding:NSUTF8StringEncoding error:nil];
+    XCTAssertFalse([NALibarchiveExtractor canHandleFileAtPath:path],
+                  @"plain text should not be accepted (libarchive reads it as mtree)");
+    [[NSFileManager defaultManager] removeItemAtPath:path error:nil];
+}
+
+- (void)testCanHandleRejectsEmptyFile {
+    NSString *path = [NATestFixtures pathForFixture:@"empty.bin"];
+    [[NSData data] writeToFile:path atomically:NO];
+    XCTAssertFalse([NALibarchiveExtractor canHandleFileAtPath:path],
+                  @"zero-byte file should not be accepted");
+    [[NSFileManager defaultManager] removeItemAtPath:path error:nil];
+}
+
 - (void)testCanHandleRejectsMissing {
     XCTAssertFalse([NALibarchiveExtractor canHandleFileAtPath:
                     @"/nonexistent/file.zip"]);
