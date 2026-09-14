@@ -179,7 +179,7 @@
                                                NSWindowStyleMaskClosable)
                                       backing:NSBackingStoreBuffered
                                         defer:NO];
-    window.title = @"NoonArchiver";
+    window.title = @"N2O Archiver";
     window.releasedWhenClosed = NO;
     [window center];
     return window;

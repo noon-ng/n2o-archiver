@@ -1,4 +1,4 @@
-name: NoonArchiver
+name: N2OArchiver
 options:
   deploymentTarget:
     macOS: "13.0"
@@ -11,19 +11,19 @@ settings:
     MACOSX_DEPLOYMENT_TARGET: "13.0"
 
 targets:
-  NoonArchiver:
+  N2OArchiver:
     type: application
     platform: macOS
     sources:
-      - path: NoonArchiver
+      - path: N2OArchiver
         excludes:
           - "*.xcassets"
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.noonarchiver.app
-        INFOPLIST_FILE: NoonArchiver/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: sh.n2o.archiver
+        INFOPLIST_FILE: N2OArchiver/Info.plist
         HEADER_SEARCH_PATHS:
-          - "$(SRCROOT)/NoonArchiver"
+          - "$(SRCROOT)/N2OArchiver"
           - "/opt/homebrew/opt/libarchive/include"
         LIBRARY_SEARCH_PATHS:
           - "/opt/homebrew/opt/libarchive/lib"

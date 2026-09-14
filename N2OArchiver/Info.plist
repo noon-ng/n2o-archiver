@@ -4,11 +4,11 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleName</key>
-    <string>NoonArchiver</string>
+    <string>N2O Archiver</string>
     <key>CFBundleDisplayName</key>
-    <string>NoonArchiver</string>
+    <string>N2O Archiver</string>
     <key>CFBundleIdentifier</key>
-    <string>com.noonarchiver.app</string>
+    <string>sh.n2o.archiver</string>
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>CFBundleShortVersionString</key>
@@ -16,7 +16,7 @@
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleExecutable</key>
-    <string>NoonArchiver</string>
+    <string>N2OArchiver</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>LSMinimumSystemVersion</key>

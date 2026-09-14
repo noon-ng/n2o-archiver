@@ -1,4 +1,4 @@
-APP_NAME     = NoonArchiver
+APP_NAME     = N2OArchiver
 BUNDLE       = build/$(APP_NAME).app
 EXECUTABLE   = $(BUNDLE)/Contents/MacOS/$(APP_NAME)
 
@@ -14,7 +14,7 @@ CFLAGS = -fobjc-arc \
          $(MIN_OS) \
          -Wall -Wextra -Wno-unused-parameter \
          -I$(LIBARCHIVE_PREFIX)/include \
-         -INoonArchiver
+         -IN2OArchiver
 
 LDFLAGS = $(ARCH) $(MIN_OS) \
           -L$(LIBARCHIVE_PREFIX)/lib \
@@ -22,11 +22,11 @@ LDFLAGS = $(ARCH) $(MIN_OS) \
           -framework Cocoa \
           -framework UniformTypeIdentifiers
 
-SOURCES = NoonArchiver/main.m \
-          NoonArchiver/AppDelegate.m \
-          NoonArchiver/NAPluginManager.m \
-          NoonArchiver/NAExtractionWindowController.m \
-          NoonArchiver/Plugins/NALibarchiveExtractor.m
+SOURCES = N2OArchiver/main.m \
+          N2OArchiver/AppDelegate.m \
+          N2OArchiver/NAPluginManager.m \
+          N2OArchiver/NAExtractionWindowController.m \
+          N2OArchiver/Plugins/NALibarchiveExtractor.m
 
 OBJECTS = $(patsubst %.m,build/obj/%.o,$(SOURCES))
 
@@ -34,8 +34,8 @@ OBJECTS = $(patsubst %.m,build/obj/%.o,$(SOURCES))
 
 all: $(BUNDLE)
 
-$(BUNDLE): $(EXECUTABLE) NoonArchiver/Info.plist
-	@cp NoonArchiver/Info.plist $(BUNDLE)/Contents/Info.plist
+$(BUNDLE): $(EXECUTABLE) N2OArchiver/Info.plist
+	@cp N2OArchiver/Info.plist $(BUNDLE)/Contents/Info.plist
 	@mkdir -p $(BUNDLE)/Contents/PlugIns
 	@mkdir -p $(BUNDLE)/Contents/Resources
 	@echo "Built $(BUNDLE)"

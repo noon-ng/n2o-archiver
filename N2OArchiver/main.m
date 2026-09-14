@@ -14,11 +14,11 @@ int main(int argc, const char *argv[]) {
         NSMenuItem *appMenuItem = [[NSMenuItem alloc] init];
         [mainMenu addItem:appMenuItem];
         NSMenu *appMenu = [[NSMenu alloc] init];
-        [appMenu addItemWithTitle:@"About NoonArchiver"
+        [appMenu addItemWithTitle:@"About N2O Archiver"
                            action:@selector(orderFrontStandardAboutPanel:)
                     keyEquivalent:@""];
         [appMenu addItem:[NSMenuItem separatorItem]];
-        [appMenu addItemWithTitle:@"Quit NoonArchiver"
+        [appMenu addItemWithTitle:@"Quit N2O Archiver"
                            action:@selector(terminate:)
                     keyEquivalent:@"q"];
         appMenuItem.submenu = appMenu;

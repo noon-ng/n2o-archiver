@@ -2,7 +2,7 @@
 #import <archive.h>
 #import <archive_entry.h>
 
-static NSString *const NALibarchiveErrorDomain = @"com.noonarchiver.libarchive";
+static NSString *const NALibarchiveErrorDomain = @"sh.n2o.archiver.libarchive";
 
 @implementation NALibarchiveExtractor
 
@@ -84,7 +84,7 @@ static NSString *const NALibarchiveErrorDomain = @"com.noonarchiver.libarchive";
 
         r = archive_write_header(ext, entry);
         if (r != ARCHIVE_OK) {
-            NSLog(@"NoonArchiver: header write error: %s", archive_error_string(ext));
+            NSLog(@"N2OArchiver: header write error: %s", archive_error_string(ext));
         } else if (archive_entry_size(entry) > 0) {
             r = [self copyDataFromArchive:a toWriter:ext];
             if (r != ARCHIVE_OK) {
@@ -176,7 +176,7 @@ static NSString *const NALibarchiveErrorDomain = @"com.noonarchiver.libarchive";
 
         r = (int)archive_write_data_block(aw, buff, size, offset);
         if (r != ARCHIVE_OK) {
-            NSLog(@"NoonArchiver: write error: %s", archive_error_string(aw));
+            NSLog(@"N2OArchiver: write error: %s", archive_error_string(aw));
             return r;
         }
     }

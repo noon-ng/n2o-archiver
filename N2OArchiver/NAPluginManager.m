@@ -44,20 +44,20 @@
             if (!pluginBundle) continue;
 
             if (![pluginBundle load]) {
-                NSLog(@"NoonArchiver: failed to load plugin bundle: %@", fullPath);
+                NSLog(@"N2OArchiver: failed to load plugin bundle: %@", fullPath);
                 continue;
             }
 
             Class principalClass = [pluginBundle principalClass];
             if (!principalClass ||
                 ![principalClass conformsToProtocol:@protocol(NAExtractorPlugin)]) {
-                NSLog(@"NoonArchiver: plugin principal class does not conform "
+                NSLog(@"N2OArchiver: plugin principal class does not conform "
                       @"to NAExtractorPlugin: %@", fullPath);
                 continue;
             }
 
             [self registerBuiltinClass:(Class<NAExtractorPlugin>)principalClass];
-            NSLog(@"NoonArchiver: loaded plugin: %@ (%@)",
+            NSLog(@"N2OArchiver: loaded plugin: %@ (%@)",
                   item, NSStringFromClass(principalClass));
         }
     }
@@ -107,7 +107,7 @@
     if (appSupport.count > 0) {
         NSString *userPlugins =
             [appSupport[0] stringByAppendingPathComponent:
-                @"NoonArchiver/Plugins"];
+                @"N2OArchiver/Plugins"];
         [paths addObject:userPlugins];
     }
 
