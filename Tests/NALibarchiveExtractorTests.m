@@ -127,6 +127,57 @@
     NAAssertNotNil(error, @"error should be set");
 }
 
+#pragma mark - Path traversal
+
+// Each traversal fixture is extracted into destDir/out; files the archive
+// tries to place outside that directory would land in destDir.
+
+- (void)testDotDotEntryDoesNotEscapeDestination {
+    NSError *error = nil;
+    BOOL ok = [self extractTraversalFixture:@"traversal-dotdot.zip" error:&error];
+    NAAssertFalse(ok, @"archive with ../ entry should fail");
+    NAAssertNotNil(error, @"error should be set");
+    NAAssertFalse([[NSFileManager defaultManager] fileExistsAtPath:
+                   [self.destDir stringByAppendingPathComponent:@"canary.txt"]],
+                  @"../canary.txt should not be written outside the destination");
+}
+
+- (void)testSymlinkEntryDoesNotEscapeDestination {
+    NSError *error = nil;
+    BOOL ok = [self extractTraversalFixture:@"traversal-symlink.tar" error:&error];
+    NAAssertFalse(ok, @"archive writing through a symlink should fail");
+    NAAssertNotNil(error, @"error should be set");
+    NAAssertFalse([[NSFileManager defaultManager] fileExistsAtPath:
+                   [self.destDir stringByAppendingPathComponent:@"canary.txt"]],
+                  @"link/canary.txt should not be written through the symlink");
+}
+
+- (void)testHardlinkEntryDoesNotEscapeDestination {
+    NSString *victim = [self.destDir stringByAppendingPathComponent:@"victim.txt"];
+    [@"original" writeToFile:victim atomically:NO
+                    encoding:NSUTF8StringEncoding error:nil];
+
+    NSError *error = nil;
+    BOOL ok = [self extractTraversalFixture:@"traversal-hardlink.tar" error:&error];
+    NAAssertFalse(ok, @"archive with hardlink to ../ should fail");
+    NAAssertNotNil(error, @"error should be set");
+
+    NSDictionary *attrs = [[NSFileManager defaultManager]
+        attributesOfItemAtPath:victim error:nil];
+    NAAssertEqual([attrs[NSFileReferenceCount] integerValue], 1,
+                  @"file outside the destination should not gain a hardlink");
+}
+
+- (void)testAbsoluteEntryIsPlacedUnderDestination {
+    NSError *error = nil;
+    BOOL ok = [self extractTraversalFixture:@"traversal-absolute.tar" error:&error];
+    NAAssertTrue(ok, @"absolute entry should extract under the destination: %@",
+                 error.localizedDescription);
+    NAAssertTrue([[NSFileManager defaultManager] fileExistsAtPath:
+                  [self.destDir stringByAppendingPathComponent:@"out/absolute.txt"]],
+                 @"/absolute.txt should be written to out/absolute.txt");
+}
+
 #pragma mark - Supported extensions
 
 - (void)testSupportedExtensions {
@@ -161,6 +212,17 @@
                                                       error:nil];
     NAAssertEqualObjects(contents, @"file-a contents\n",
                          @"a.txt contents should match after extracting %@", name);
+}
+
+- (BOOL)extractTraversalFixture:(NSString *)name error:(NSError **)error {
+    NSString *out = [self.destDir stringByAppendingPathComponent:@"out"];
+    [[NSFileManager defaultManager] createDirectoryAtPath:out
+                              withIntermediateDirectories:YES
+                                               attributes:nil error:nil];
+    return [self.extractor extractArchiveAtPath:[NATestFixtures pathForFixture:name]
+                                  toDestination:out
+                                       progress:nil
+                                          error:error];
 }
 
 - (NSString *)findFileNamed:(NSString *)name under:(NSString *)dir {

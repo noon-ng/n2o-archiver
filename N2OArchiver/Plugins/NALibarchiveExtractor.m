@@ -53,12 +53,32 @@ static NSString *const NALibarchiveErrorDomain = @"sh.n2o.archiver.libarchive";
     archive_read_support_filter_all(a);
     archive_read_support_format_all(a);
 
+    // Entry paths are rewritten to absolute paths under destPath, so
+    // SECURE_NOABSOLUTEPATHS cannot be used. SECURE_NODOTDOT rejects entries
+    // (and hardlink targets) containing "..", and SECURE_SYMLINKS rejects
+    // entries whose path passes through a symlink.
     int flags = ARCHIVE_EXTRACT_TIME
               | ARCHIVE_EXTRACT_PERM
               | ARCHIVE_EXTRACT_ACL
-              | ARCHIVE_EXTRACT_FFLAGS;
+              | ARCHIVE_EXTRACT_FFLAGS
+              | ARCHIVE_EXTRACT_SECURE_NODOTDOT
+              | ARCHIVE_EXTRACT_SECURE_SYMLINKS;
     archive_write_disk_set_options(ext, flags);
     archive_write_disk_set_standard_lookup(ext);
+
+    // SECURE_SYMLINKS checks every component of the absolute path, so the
+    // destination itself must not contain symlinks (e.g. /var -> /private/var).
+    char resolvedDest[PATH_MAX];
+    if (!realpath(destPath.fileSystemRepresentation, resolvedDest)) {
+        if (error) {
+            *error = [NSError errorWithDomain:NSPOSIXErrorDomain
+                                         code:errno
+                                     userInfo:@{NSFilePathErrorKey: destPath}];
+        }
+        archive_read_free(a);
+        archive_write_free(ext);
+        return NO;
+    }
 
     int r = archive_read_open_filename(a, archivePath.fileSystemRepresentation, 10240);
     if (r != ARCHIVE_OK) {
@@ -76,14 +96,18 @@ static NSString *const NALibarchiveErrorDomain = @"sh.n2o.archiver.libarchive";
     BOOL success = YES;
 
     while (archive_read_next_header(a, &entry) == ARCHIVE_OK) {
-        // Rewrite entry pathname to be under destPath.
-        const char *entryPath = archive_entry_pathname(entry);
-        NSString *fullPath = [destPath stringByAppendingPathComponent:
-                              [NSString stringWithUTF8String:entryPath]];
-        archive_entry_set_pathname(entry, fullPath.fileSystemRepresentation);
+        // Rewrite the entry pathname, and the hardlink target if any, to be
+        // under the destination. Hardlink targets are otherwise resolved
+        // against the process working directory.
+        [self rebaseEntry:entry underDirectory:resolvedDest];
 
         r = archive_write_header(ext, entry);
-        if (r != ARCHIVE_OK) {
+        if (r < ARCHIVE_WARN) {
+            // Includes entries rejected by the SECURE_* checks above.
+            [self setError:error fromArchive:ext code:3];
+            success = NO;
+            break;
+        } else if (r != ARCHIVE_OK) {
             NSLog(@"N2OArchiver: header write error: %s", archive_error_string(ext));
         } else if (archive_entry_size(entry) > 0) {
             r = [self copyDataFromArchive:a toWriter:ext];
@@ -140,6 +164,31 @@ static NSString *const NALibarchiveErrorDomain = @"sh.n2o.archiver.libarchive";
 }
 
 #pragma mark - Private
+
+- (void)rebaseEntry:(struct archive_entry *)entry
+     underDirectory:(const char *)directory {
+    // Built from raw bytes: entry names are not guaranteed to be UTF-8.
+    // A leading "/" in the entry name yields "//", which libarchive collapses.
+    const char *pathname = archive_entry_pathname(entry);
+    if (pathname) {
+        NSMutableData *full = [self joinPath:directory with:pathname];
+        archive_entry_set_pathname(entry, full.bytes);
+    }
+
+    const char *hardlink = archive_entry_hardlink(entry);
+    if (hardlink) {
+        NSMutableData *full = [self joinPath:directory with:hardlink];
+        archive_entry_set_hardlink(entry, full.bytes);
+    }
+}
+
+- (NSMutableData *)joinPath:(const char *)directory with:(const char *)name {
+    NSMutableData *data = [NSMutableData dataWithBytes:directory
+                                                length:strlen(directory)];
+    [data appendBytes:"/" length:1];
+    [data appendBytes:name length:strlen(name) + 1];
+    return data;
+}
 
 - (int64_t)totalSizeOfArchive:(NSString *)archivePath {
     struct archive *a = archive_read_new();
