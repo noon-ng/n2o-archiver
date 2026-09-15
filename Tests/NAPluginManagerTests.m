@@ -3,7 +3,6 @@
 #import "NAPluginManager.h"
 #import "Plugins/NALibarchiveExtractor.h"
 #import "Plugins/NA7zExtractor.h"
-#import "Plugins/NARarExtractor.h"
 
 @interface NAPluginManagerTests : NATestCase
 @end
@@ -77,13 +76,14 @@
                  @".7z should route to NA7zExtractor, got %@", [ext class]);
 }
 
-- (void)testBuiltinRoutingRarUsesRarExtractor {
+// Homebrew's 7zz is built without the RAR codec, so RAR goes to libarchive.
+- (void)testBuiltinRoutingRarUsesLibarchive {
     NAPluginManager *pm = [[NAPluginManager alloc] init];
     [pm registerBuiltinExtractors];
     id<NAExtractorPlugin> ext = [pm extractorForFileAtPath:
         [NATestFixtures pathForFixture:@"test.rar"]];
-    NAAssertTrue([ext isKindOfClass:[NARarExtractor class]],
-                 @".rar should route to NARarExtractor, got %@", [ext class]);
+    NAAssertTrue([ext isKindOfClass:[NALibarchiveExtractor class]],
+                 @".rar should route to NALibarchiveExtractor, got %@", [ext class]);
 }
 
 - (void)testBuiltinRoutingZipUsesLibarchive {

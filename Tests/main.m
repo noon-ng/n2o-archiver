@@ -8,7 +8,6 @@
 #import "NAExtractionWindowControllerTests.m"
 #import "AppDelegateTests.m"
 #import "NA7zExtractorTests.m"
-#import "NARarExtractorTests.m"
 #import "NAQuarantineTests.m"
 
 int main(int argc, const char *argv[]) {
@@ -24,7 +23,6 @@ int main(int argc, const char *argv[]) {
         [NATestRunner registerTestClass:[NAExtractionWindowControllerTests class]];
         [NATestRunner registerTestClass:[AppDelegateTests class]];
         [NATestRunner registerTestClass:[NA7zExtractorTests class]];
-        [NATestRunner registerTestClass:[NARarExtractorTests class]];
         [NATestRunner registerTestClass:[NAQuarantineTests class]];
 
         int result = [NATestRunner runAllTests];

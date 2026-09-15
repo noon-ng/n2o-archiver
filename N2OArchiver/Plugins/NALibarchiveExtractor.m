@@ -51,7 +51,7 @@ static BOOL NAIsUncompressedRaw(struct archive *a) {
 
 + (NSArray<NSString *> *)supportedExtensions {
     return @[
-        @"zip", @"tar", @"gz", @"tgz", @"bz2", @"tbz2", @"xz", @"txz",
+        @"zip", @"rar", @"tar", @"gz", @"tgz", @"bz2", @"tbz2", @"xz", @"txz",
         @"lz", @"lzma", @"zst", @"zstd", @"cab", @"iso", @"cpio",
         @"ar", @"lzh", @"lha", @"warc"
     ];
@@ -60,6 +60,7 @@ static BOOL NAIsUncompressedRaw(struct archive *a) {
 + (NSArray<NSString *> *)supportedUTIs {
     return @[
         @"public.zip-archive",
+        @"com.rarlab.rar-archive",
         @"public.tar-archive",
         @"org.gnu.gnu-zip-archive",
         @"public.bzip2-archive",
@@ -214,9 +215,12 @@ static BOOL NAIsUncompressedRaw(struct archive *a) {
             NSLog(@"N2OArchiver: header write warning: %s", archive_error_string(ext));
         }
 
-        // Entries without a stored size (such as raw) still carry data, so
-        // data is copied for every entry; directories return EOF at once.
-        r = [self copyDataFromArchive:a toWriter:ext];
+        // Data is read for every entry except directories, including entries
+        // without a stored size (such as raw) or without a file type in their
+        // mode. The RAR5 reader fails when asked for a directory's data.
+        r = archive_entry_filetype(entry) != AE_IFDIR
+            ? [self copyDataFromArchive:a toWriter:ext]
+            : ARCHIVE_OK;
         if (r != ARCHIVE_OK) {
             if (self.cancelled) {
                 [self setCancelledError:error];

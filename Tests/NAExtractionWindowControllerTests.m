@@ -9,7 +9,9 @@
 
 // Extractor for files ending in .n2oscripted. An archive named wait… blocks
 // until NAScriptedRelease is signalled, so tests can observe an extraction in
-// progress; one named immutable… writes a file with UF_IMMUTABLE and fails.
+// progress; one named immutable… writes a file with UF_IMMUTABLE and fails;
+// one named fail… writes a file and fails; one named long-error… fails with
+// 500 lines of tool output as the failure reason.
 static dispatch_semaphore_t NAScriptedRelease;
 
 @interface NATestScriptedExtractor : NSObject <NAExtractorPlugin>
@@ -33,6 +35,24 @@ static dispatch_semaphore_t NAScriptedRelease;
     if ([name hasPrefix:@"wait"]) {
         dispatch_semaphore_wait(NAScriptedRelease,
                                 dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10 * NSEC_PER_SEC)));
+    } else if ([name hasPrefix:@"fail"]) {
+        if (error) {
+            *error = [NSError errorWithDomain:@"NATestScriptedExtractor" code:2
+                                     userInfo:@{NSLocalizedDescriptionKey:
+                                                    @"Unsupported compression method."}];
+        }
+        return NO;
+    } else if ([name hasPrefix:@"long-error"]) {
+        NSMutableString *output = [NSMutableString string];
+        for (int i = 1; i <= 500; i++) {
+            [output appendFormat:@"ERROR: Unsupported Method : folder/file-%d.bin\n", i];
+        }
+        if (error) {
+            *error = [NSError errorWithDomain:@"NATestScriptedExtractor" code:3
+                                     userInfo:@{NSLocalizedDescriptionKey: @"7zz could not extract the archive.",
+                                                NSLocalizedFailureReasonErrorKey: output}];
+        }
+        return NO;
     } else if ([name hasPrefix:@"immutable"]) {
         chflags(file.fileSystemRepresentation, UF_IMMUTABLE);
         if (error) {
@@ -57,6 +77,7 @@ static dispatch_semaphore_t NAScriptedRelease;
                              error:(NSError **)error;
 - (void)unwrapSingleItemDirectoryAtPath:(NSString *)destPath;
 - (BOOL)windowShouldClose:(NSWindow *)sender;
+- (void)toggleErrorDetails:(id)sender;
 @end
 
 @interface NAExtractionWindowControllerTests ()
@@ -230,6 +251,60 @@ static dispatch_semaphore_t NAScriptedRelease;
     NAAssertFalse([self fileExists:@"wait-space" under:dir], @"no output folder should remain");
     NAAssertEqual([self stagingDirectoriesIn:dir].count, 0u, @"the staging directory should be removed");
     [wc.window endSheet:wc.window.attachedSheet returnCode:NSAlertFirstButtonReturn];
+}
+
+- (void)testFailedExtractionRemovesPartialOutput {
+    NSString *dir = [self makeUnwrapDestination];
+    [self writeFile:@"fail-partial.n2oscripted" under:dir];
+    NSString *archive = [dir stringByAppendingPathComponent:@"fail-partial.n2oscripted"];
+
+    NAExtractionWindowController *wc =
+        [[NAExtractionWindowController alloc] initWithArchivePath:archive];
+    [wc beginExtraction];
+    NAAssertTrue(NAWaitUntil(^BOOL { return !wc.isWorking && wc.window.attachedSheet != nil; }, 10.0),
+                 @"the failure should be presented");
+
+    NAAssertFalse([self fileExists:@"fail-partial" under:dir],
+                  @"a failed extraction should leave no output folder");
+    NAAssertEqual([self stagingDirectoriesIn:dir].count, 0u,
+                  @"the partial output in the staging directory should be removed");
+    [wc.window endSheet:wc.window.attachedSheet returnCode:NSAlertFirstButtonReturn];
+}
+
+#pragma mark - Error sheet
+
+- (void)testLongErrorDetailsAreCollapsedAndScrollable {
+    NSString *dir = [self makeUnwrapDestination];
+    [self writeFile:@"long-error.n2oscripted" under:dir];
+    NSString *archive = [dir stringByAppendingPathComponent:@"long-error.n2oscripted"];
+
+    NAExtractionWindowController *wc =
+        [[NAExtractionWindowController alloc] initWithArchivePath:archive];
+    [wc beginExtraction];
+    NAAssertTrue(NAWaitUntil(^BOOL { return !wc.isWorking && wc.window.attachedSheet != nil; }, 10.0),
+                 @"the failure should be presented");
+
+    NSAlert *alert = [wc valueForKey:@"errorAlert"];
+    NSScrollView *details = [wc valueForKey:@"errorDetailsScrollView"];
+    CGFloat screenHeight = NSHeight(NSScreen.mainScreen.visibleFrame);
+    NAAssertTrue(alert != nil && details != nil, @"long output should be in a details area");
+    NAAssertTrue(details.hidden, @"the details area should start collapsed");
+    NAAssertTrue([[(NSTextView *)details.documentView string] containsString:@"file-500.bin"],
+                 @"the details area should hold the full output");
+    NAAssertTrue(NSHeight(wc.window.attachedSheet.frame) < 400,
+                 @"the collapsed sheet should be short, got %.0f", NSHeight(wc.window.attachedSheet.frame));
+
+    [wc toggleErrorDetails:nil];
+    NAAssertFalse(details.hidden, @"Show Details should expand the details area");
+    NAAssertTrue(NSHeight(wc.window.attachedSheet.frame) < MIN(600, screenHeight),
+                 @"the expanded sheet should stay within a fixed height, got %.0f",
+                 NSHeight(wc.window.attachedSheet.frame));
+    NAAssertTrue(NSHeight(details.frame) < NSHeight(details.documentView.frame),
+                 @"the output should scroll inside the details area");
+
+    [wc.window endSheet:wc.window.attachedSheet returnCode:NSAlertFirstButtonReturn];
+    NAAssertTrue(NAWaitUntil(^BOOL { return !wc.window.isVisible; }, 10.0),
+                 @"closing the sheet should close the window");
 }
 
 #pragma mark - Destination directory

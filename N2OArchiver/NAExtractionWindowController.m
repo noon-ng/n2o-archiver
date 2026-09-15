@@ -20,6 +20,10 @@
 @property (nonatomic, strong, nullable) id<NSObject> activity;
 // The error shown in the sheet, as composed by presentError:title:.
 @property (nonatomic, strong, nullable) NSError *presentedError;
+@property (nonatomic, strong, nullable) NSAlert *errorAlert;
+@property (nonatomic, strong, nullable) NSView *errorDetailsView;
+@property (nonatomic, strong, nullable) NSScrollView *errorDetailsScrollView;
+@property (nonatomic, strong, nullable) NSButton *errorDetailsButton;
 // Checks free space on the volume holding a path; replaceable in tests.
 @property (nonatomic, copy) BOOL (^spaceIsLow)(NSString *path);
 // Polls spaceIsLow while working.
@@ -133,24 +137,33 @@
 }
 
 // Unwraps a successful extraction, moves the staging directory to its visible
-// name and reports the result. A failed extraction that wrote nothing leaves
-// no folder behind.
+// name and reports the result. A failed extraction's output is removed: it is
+// incomplete and may consist of empty files (for example when the extractor
+// does not support an entry's compression method).
 - (void)finishExtractionInStagingDirectory:(NSString *)stagingPath
                                  succeeded:(BOOL)ok
                                      error:(nullable NSError *)error
                            quarantineError:(nullable NSError *)quarantineError {
-    NSFileManager *fm = [NSFileManager defaultManager];
-    NSError *failure = ok ? nil : [self extractionError:error
-                                    addingQuarantineError:quarantineError];
-
-    if (!ok && [fm contentsOfDirectoryAtPath:stagingPath error:nil].count == 0) {
-        rmdir(stagingPath.fileSystemRepresentation);
-        self.working = NO;
-        [self presentError:failure title:[self failureTitle]];
+    if (!ok) {
+        NSError *failure = [self extractionError:error addingQuarantineError:quarantineError];
+        self.statusLabel.stringValue = @"Removing partial output…";
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+            NSError *removeError = nil;
+            BOOL removed = [[NSFileManager defaultManager] removeItemAtPath:stagingPath
+                                                                      error:&removeError];
+            dispatch_async(dispatch_get_main_queue(), ^{
+                self.working = NO;
+                [self presentError:removed ? failure
+                                           : [self error:failure
+                                             notingLeftoverOutputAt:stagingPath
+                                                    removeError:removeError]
+                             title:[self failureTitle]];
+            });
+        });
         return;
     }
 
-    if (ok && !quarantineError) {
+    if (!quarantineError) {
         [self unwrapSingleItemDirectoryAtPath:stagingPath];
     }
 
@@ -175,8 +188,6 @@
                                                code:NSFileWriteUnknownError
                                            userInfo:userInfo]
                      title:[self failureTitle]];
-    } else if (!ok) {
-        [self presentError:failure title:[self failureTitle]];
     } else if (quarantineError) {
         [self presentError:quarantineError
                      title:[NSString stringWithFormat:
@@ -207,6 +218,21 @@
     NSMutableDictionary *userInfo = [error.userInfo mutableCopy];
     userInfo[NSLocalizedDescriptionKey] = error.localizedDescription;
     userInfo[NSLocalizedRecoverySuggestionErrorKey] = [suggestion componentsJoinedByString:@"\n\n"];
+    return [NSError errorWithDomain:error.domain code:error.code userInfo:userInfo];
+}
+
+// The failure with a note that the partial output could not be removed.
+- (NSError *)error:(NSError *)error
+    notingLeftoverOutputAt:(NSString *)path
+               removeError:(nullable NSError *)removeError {
+    NSMutableDictionary *userInfo = [error.userInfo mutableCopy];
+    userInfo[NSLocalizedDescriptionKey] = error.localizedDescription;
+    NSString *note = [NSString stringWithFormat:
+        @"The partially extracted files could not be removed and are in the hidden folder “%@”.%@",
+        path, removeError ? [@" " stringByAppendingString:removeError.localizedDescription] : @""];
+    NSString *suggestion = error.localizedRecoverySuggestion;
+    userInfo[NSLocalizedRecoverySuggestionErrorKey] =
+        suggestion.length > 0 ? [NSString stringWithFormat:@"%@\n\n%@", suggestion, note] : note;
     return [NSError errorWithDomain:error.domain code:error.code userInfo:userInfo];
 }
 
@@ -423,43 +449,112 @@
             self.archivePath.lastPathComponent];
 }
 
+// Longer recovery suggestions go into the collapsible details area.
+static const NSUInteger NAMaxSummarySuggestionLength = 300;
+
 // Shows the error as a sheet on the extraction window and closes the window
-// when the sheet is dismissed. The sheet title names the archive; its text
-// combines the error's description, failure reason and recovery suggestion,
-// so long messages such as 7zz output are shown in full and can be selected.
+// when the sheet is dismissed. The sheet shows the title and a short summary
+// with the Close button; longer text, such as 7zz output with one line per
+// file, goes into a collapsed "Details" area that scrolls within a fixed
+// height, so the sheet stays within the screen.
 - (void)presentError:(NSError *)error title:(NSString *)title {
     self.statusLabel.stringValue = title;
     self.progressBar.hidden = YES;
     self.cancelButton.title = @"Close";
     self.cancelButton.action = @selector(close);
 
+    NSString *description = error.localizedDescription ?: @"";
+    NSString *reason = error.localizedFailureReason ?: @"";
+    NSString *suggestion = error.localizedRecoverySuggestion ?: @"";
+
+    NSMutableArray<NSString *> *summary = [NSMutableArray array];
     NSMutableArray<NSString *> *details = [NSMutableArray array];
-    for (NSString *text in @[error.localizedDescription ?: @"",
-                             error.localizedFailureReason ?: @"",
-                             error.localizedRecoverySuggestion ?: @""]) {
-        if (text.length > 0 && ![details containsObject:text]) [details addObject:text];
+    if (description.length > 0) [summary addObject:description];
+    if (suggestion.length > 0 && ![summary containsObject:suggestion]) {
+        [(suggestion.length <= NAMaxSummarySuggestionLength ? summary : details) addObject:suggestion];
+    }
+    if (reason.length > 0 && ![summary containsObject:reason] && ![details containsObject:reason]) {
+        [details addObject:reason];
     }
 
+    NSMutableArray<NSString *> *all = [summary mutableCopy];
+    [all addObjectsFromArray:details];
     NSMutableDictionary *userInfo = [@{
         NSLocalizedDescriptionKey: title,
         NSUnderlyingErrorKey: error,
     } mutableCopy];
-    if (details.count > 0) {
-        userInfo[NSLocalizedRecoverySuggestionErrorKey] = [details componentsJoinedByString:@"\n\n"];
+    if (all.count > 0) {
+        userInfo[NSLocalizedRecoverySuggestionErrorKey] = [all componentsJoinedByString:@"\n\n"];
     }
-    self.presentedError = [NSError errorWithDomain:error.domain
-                                              code:error.code
-                                          userInfo:userInfo];
+    self.presentedError = [NSError errorWithDomain:error.domain code:error.code userInfo:userInfo];
 
-    [self presentError:self.presentedError
-        modalForWindow:self.window
-              delegate:self
-    didPresentSelector:@selector(didPresentErrorWithRecovery:contextInfo:)
-           contextInfo:NULL];
+    NSAlert *alert = [[NSAlert alloc] init];
+    alert.alertStyle = NSAlertStyleWarning;
+    alert.messageText = title;
+    alert.informativeText = [summary componentsJoinedByString:@"\n\n"];
+    [alert addButtonWithTitle:@"Close"];
+    if (details.count > 0) {
+        alert.accessoryView = [self errorDetailsViewWithText:[details componentsJoinedByString:@"\n\n"]];
+    }
+    [alert layout];
+    self.errorAlert = alert;
+
+    [alert beginSheetModalForWindow:self.window completionHandler:^(NSModalResponse response) {
+        self.errorAlert = nil;
+        [self close];
+    }];
 }
 
-- (void)didPresentErrorWithRecovery:(BOOL)didRecover contextInfo:(void *)contextInfo {
-    [self close];
+static const CGFloat NAErrorDetailsWidth = 400;
+static const CGFloat NAErrorDetailsHeight = 180;
+
+- (NSView *)errorDetailsViewWithText:(NSString *)text {
+    NSButton *button = [NSButton buttonWithTitle:@"Show Details"
+                                          target:self
+                                          action:@selector(toggleErrorDetails:)];
+    [button sizeToFit];
+
+    NSScrollView *scrollView = [[NSScrollView alloc]
+        initWithFrame:NSMakeRect(0, 0, NAErrorDetailsWidth, NAErrorDetailsHeight)];
+    scrollView.hasVerticalScroller = YES;
+    scrollView.borderType = NSBezelBorder;
+    scrollView.hidden = YES;
+
+    NSTextView *textView = [[NSTextView alloc] initWithFrame:scrollView.contentView.bounds];
+    textView.string = text;
+    textView.editable = NO;
+    textView.selectable = YES;
+    textView.font = [NSFont monospacedSystemFontOfSize:11 weight:NSFontWeightRegular];
+    textView.autoresizingMask = NSViewWidthSizable;
+    textView.textContainer.widthTracksTextView = YES;
+    scrollView.documentView = textView;
+
+    NSView *container = [[NSView alloc] init];
+    [container addSubview:button];
+    [container addSubview:scrollView];
+    self.errorDetailsView = container;
+    self.errorDetailsScrollView = scrollView;
+    self.errorDetailsButton = button;
+    [self layoutErrorDetails];
+    return container;
+}
+
+- (void)toggleErrorDetails:(id)sender {
+    self.errorDetailsScrollView.hidden = !self.errorDetailsScrollView.hidden;
+    self.errorDetailsButton.title = self.errorDetailsScrollView.hidden ? @"Show Details" : @"Hide Details";
+    [self.errorDetailsButton sizeToFit];
+    [self layoutErrorDetails];
+    [self.errorAlert layout];
+}
+
+// Places the button above the scroll view when it is shown; the container
+// height follows, and NSAlert's layout resizes the sheet.
+- (void)layoutErrorDetails {
+    CGFloat buttonHeight = NSHeight(self.errorDetailsButton.frame);
+    CGFloat detailsHeight = self.errorDetailsScrollView.hidden ? 0 : NAErrorDetailsHeight + 8;
+    self.errorDetailsView.frame = NSMakeRect(0, 0, NAErrorDetailsWidth, buttonHeight + detailsHeight);
+    [self.errorDetailsButton setFrameOrigin:NSMakePoint(0, detailsHeight)];
+    self.errorDetailsScrollView.frame = NSMakeRect(0, 0, NAErrorDetailsWidth, NAErrorDetailsHeight);
 }
 
 #pragma mark - Actions

@@ -19,8 +19,9 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)registerBuiltinClass:(Class<NAExtractorPlugin>)cls;
 
 /// Registers the extractors shipped with the app. Sniffing uses the first
-/// match in registration order, so format-specific extractors (7z, RAR) are
-/// registered before NALibarchiveExtractor, which can also read those formats.
+/// match in registration order, so NA7zExtractor is registered before
+/// NALibarchiveExtractor, which can also read 7z. RAR is extracted by
+/// libarchive: Homebrew's 7zz is built without the RAR codec.
 - (void)registerBuiltinExtractors;
 
 - (nullable id<NAExtractorPlugin>)extractorForFileAtPath:(NSString *)path;

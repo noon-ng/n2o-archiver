@@ -64,6 +64,24 @@
     [self assertExtractsFixture:@"test.tar.xz"];
 }
 
+- (void)testExtractRar {
+    [self assertExtractsFixture:@"test.rar"];
+}
+
+- (void)testDiskImageNamedRarIsNotExtracted {
+    NSString *renamed = [NATestFixtures pathForFixture:@"disk-image-renamed.rar"];
+    [[NSFileManager defaultManager] copyItemAtPath:[NATestFixtures pathForFixture:@"disk-image.dmg"]
+                                            toPath:renamed error:nil];
+    NSError *error = nil;
+    BOOL ok = [self.extractor extractArchiveAtPath:renamed toDestination:self.destDir
+                                          progress:nil error:&error];
+    [[NSFileManager defaultManager] removeItemAtPath:renamed error:nil];
+    NAAssertFalse(ok, @"a disk image named .rar should not be extracted");
+    NAAssertEqual([[NSFileManager defaultManager]
+                      contentsOfDirectoryAtPath:self.destDir error:nil].count, 0u,
+                  @"nothing should be written");
+}
+
 - (void)testExtractCpio {
     [self assertExtractsFixture:@"test.cpio"];
 }

@@ -1,7 +1,6 @@
 #import "NAPluginManager.h"
 #import "Plugins/NA7zExtractor.h"
 #import "Plugins/NALibarchiveExtractor.h"
-#import "Plugins/NARarExtractor.h"
 #import <Security/Security.h>
 
 @interface NAPluginManager ()
@@ -35,7 +34,6 @@
 
 - (void)registerBuiltinExtractors {
     [self registerBuiltinClass:[NA7zExtractor class]];
-    [self registerBuiltinClass:[NARarExtractor class]];
     [self registerBuiltinClass:[NALibarchiveExtractor class]];
 }
 
