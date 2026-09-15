@@ -1,5 +1,6 @@
 #import "NATestCase.h"
 #import "NATestFixtures.h"
+#import "NAWait.h"
 #import "NAExtractionWindowController.h"
 #include <sys/xattr.h>
 #import "NAPluginManager.h"
@@ -58,12 +59,8 @@
 
     [wc beginExtraction];
 
-    // Extraction runs asynchronously — wait briefly.
-    NSDate *timeout = [NSDate dateWithTimeIntervalSinceNow:5.0];
-    while ([[NSDate date] compare:timeout] == NSOrderedAscending) {
-        [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
-                                 beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.1]];
-    }
+    NAAssertTrue(NAWaitUntil(^BOOL { return !wc.isWorking; }, 10.0),
+                 @"extraction should finish");
 
     // Verify extraction output exists.
     NSString *expectedDir = [[NATestFixtures fixtureDir]
@@ -132,11 +129,8 @@
     [wc beginExtraction];
     [wc cancelExtraction:nil];
 
-    NSDate *timeout = [NSDate dateWithTimeIntervalSinceNow:2.0];
-    while ([[NSDate date] compare:timeout] == NSOrderedAscending) {
-        [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
-                                 beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.1]];
-    }
+    NAAssertTrue(NAWaitUntil(^BOOL { return !wc.isWorking && !wc.window.isVisible; }, 10.0),
+                 @"the cancelled extraction should be cleaned up and its window closed");
 
     NAAssertTrue([self fileExists:@"test/keep.txt" under:dir],
                  @"cancel should not remove a directory that existed before extraction");
@@ -167,7 +161,8 @@
                  @"window should stay open until the extraction has returned");
     NAAssertTrue(wc.isWorking, @"controller should report work in progress");
 
-    [self spinRunLoopFor:2.0];
+    NAAssertTrue(NAWaitUntil(^BOOL { return !wc.isWorking && !wc.window.isVisible; }, 10.0),
+                 @"the cancelled extraction should be cleaned up and its window closed");
 
     NAAssertFalse(wc.isWorking, @"work should be finished after cleanup");
     NAAssertFalse(wc.window.isVisible, @"window should close after cleanup");
@@ -186,20 +181,14 @@
 
     NAAssertFalse(shouldClose, @"window should not close while extracting");
 
-    [self spinRunLoopFor:2.0];
+    NAAssertTrue(NAWaitUntil(^BOOL { return !wc.isWorking && !wc.window.isVisible; }, 10.0),
+                 @"the cancelled extraction should be cleaned up and its window closed");
 
     NAAssertFalse(wc.window.isVisible, @"window should close after cleanup");
     NAAssertFalse([self fileExists:@"test" under:dir],
                   @"closing during extraction should remove the output");
 }
 
-- (void)spinRunLoopFor:(NSTimeInterval)seconds {
-    NSDate *timeout = [NSDate dateWithTimeIntervalSinceNow:seconds];
-    while ([[NSDate date] compare:timeout] == NSOrderedAscending) {
-        [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
-                                 beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.1]];
-    }
-}
 
 #pragma mark - Quarantine
 
@@ -213,7 +202,8 @@
     NAExtractionWindowController *wc =
         [[NAExtractionWindowController alloc] initWithArchivePath:archive];
     [wc beginExtraction];
-    [self spinRunLoopFor:3.0];
+    NAAssertTrue(NAWaitUntil(^BOOL { return !wc.isWorking; }, 10.0),
+                 @"extraction should finish");
 
     NSString *dest = [dir stringByAppendingPathComponent:@"test"];
     NSString *extracted = nil;
@@ -247,7 +237,8 @@
     NAAssertNotNil([wc valueForKey:@"activity"],
                    @"extraction should hold an NSProcessInfo activity");
 
-    [self spinRunLoopFor:3.0];
+    NAAssertTrue(NAWaitUntil(^BOOL { return !wc.isWorking; }, 10.0),
+                 @"extraction should finish");
     NAAssertNil([wc valueForKey:@"activity"],
                 @"the activity should end when the work is finished");
 }
@@ -358,15 +349,17 @@
 
     [wc beginExtraction];
 
-    // Wait for the error to be displayed.
-    NSDate *timeout = [NSDate dateWithTimeIntervalSinceNow:2.0];
-    while ([[NSDate date] compare:timeout] == NSOrderedAscending) {
-        [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
-                                 beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.1]];
-    }
+    NAAssertTrue(NAWaitUntil(^BOOL { return !wc.isWorking; }, 10.0),
+                 @"extraction should finish");
 
     // Window should still exist (not auto-closed on error).
-    NAAssertNotNil(wc.window, @"window should remain open on error");
+    NSButton *button = [wc valueForKey:@"cancelButton"];
+    NSTextField *status = [wc valueForKey:@"statusLabel"];
+    NAAssertTrue([button.title isEqualToString:@"Close"],
+                 @"the button should offer Close after an error, got %@", button.title);
+    NAAssertTrue(status.stringValue.length > 0 &&
+                 ![status.stringValue isEqualToString:@"Extracting…"],
+                 @"the status should show the error, got %@", status.stringValue);
 }
 
 @end

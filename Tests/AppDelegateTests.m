@@ -1,5 +1,6 @@
 #import "NATestCase.h"
 #import "NATestFixtures.h"
+#import "NAWait.h"
 #import "AppDelegate.h"
 #import "NAPluginManager.h"
 #import "Plugins/NALibarchiveExtractor.h"
@@ -22,12 +23,8 @@
     BOOL handled = [delegate application:NSApp openFile:path];
     NAAssertTrue(handled, @"should accept a valid archive path");
 
-    // Wait for extraction.
-    NSDate *timeout = [NSDate dateWithTimeIntervalSinceNow:5.0];
-    while ([[NSDate date] compare:timeout] == NSOrderedAscending) {
-        [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
-                                 beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.1]];
-    }
+    NAAssertTrue(NAWaitUntil(^BOOL { return [[delegate valueForKey:@"windowControllers"] count] == 0; }, 10.0),
+                 @"the extraction window should close");
 
     // Clean up extraction output.
     NSString *expectedDir = [[NATestFixtures fixtureDir]
@@ -70,12 +67,8 @@
     NAAssertEqual([[delegate valueForKey:@"windowControllers"] count], 1u,
                   @"opening a file should add a window controller");
 
-    // Extraction window closes 0.5 s after completion.
-    NSDate *timeout = [NSDate dateWithTimeIntervalSinceNow:3.0];
-    while ([[NSDate date] compare:timeout] == NSOrderedAscending) {
-        [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
-                                 beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.1]];
-    }
+    NAAssertTrue(NAWaitUntil(^BOOL { return [[delegate valueForKey:@"windowControllers"] count] == 0; }, 10.0),
+                 @"the extraction window should close");
 
     NAAssertEqual([[delegate valueForKey:@"windowControllers"] count], 0u,
                   @"window controller should be removed after its window closes");
@@ -113,11 +106,8 @@
     NAAssertEqual(reply, NSTerminateLater,
                   @"quit during extraction should wait for cleanup");
 
-    NSDate *timeout = [NSDate dateWithTimeIntervalSinceNow:3.0];
-    while ([[NSDate date] compare:timeout] == NSOrderedAscending) {
-        [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
-                                 beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.1]];
-    }
+    NAAssertTrue(NAWaitUntil(^BOOL { return [[delegate valueForKey:@"windowControllers"] count] == 0; }, 10.0),
+                 @"the cancelled extraction windows should close");
 
     BOOL outputExists = [fm fileExistsAtPath:[dir stringByAppendingPathComponent:@"test"]];
     [fm removeItemAtPath:dir error:nil];

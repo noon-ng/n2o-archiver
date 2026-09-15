@@ -40,7 +40,8 @@ OBJECTS = $(patsubst %.m,build/obj/%.o,$(SOURCES))
 # these need to compile.  The app sources (minus main.m) are linked in.
 TEST_SOURCES = Tests/main.m \
                Tests/NATestCase.m \
-               Tests/NATestFixtures.m
+               Tests/NATestFixtures.m \
+               Tests/NAWait.m
 
 APP_SOURCES_NO_MAIN = $(filter-out N2OArchiver/main.m,$(SOURCES))
 TEST_OBJECTS = $(patsubst %.m,build/obj/%.o,$(TEST_SOURCES)) \

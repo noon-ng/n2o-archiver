@@ -1,5 +1,6 @@
 #import <XCTest/XCTest.h>
 #import "NATestFixtures.h"
+#import "NAWait.h"
 #import "NAExtractionWindowController.h"
 #include <sys/xattr.h>
 #import "NAPluginManager.h"
@@ -138,11 +139,8 @@
     [wc beginExtraction];
     [wc cancelExtraction:nil];
 
-    NSDate *timeout = [NSDate dateWithTimeIntervalSinceNow:2.0];
-    while ([[NSDate date] compare:timeout] == NSOrderedAscending) {
-        [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
-                                 beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.1]];
-    }
+    XCTAssertTrue(NAWaitUntil(^BOOL { return !wc.isWorking && !wc.window.isVisible; }, 10.0),
+                 @"the cancelled extraction should be cleaned up and its window closed");
 
     XCTAssertTrue([self fileExists:@"test/keep.txt" under:dir],
                  @"cancel should not remove a directory that existed before extraction");
@@ -173,7 +171,8 @@
                  @"window should stay open until the extraction has returned");
     XCTAssertTrue(wc.isWorking, @"controller should report work in progress");
 
-    [self spinRunLoopFor:2.0];
+    XCTAssertTrue(NAWaitUntil(^BOOL { return !wc.isWorking && !wc.window.isVisible; }, 10.0),
+                 @"the cancelled extraction should be cleaned up and its window closed");
 
     XCTAssertFalse(wc.isWorking, @"work should be finished after cleanup");
     XCTAssertFalse(wc.window.isVisible, @"window should close after cleanup");
@@ -192,20 +191,14 @@
 
     XCTAssertFalse(shouldClose, @"window should not close while extracting");
 
-    [self spinRunLoopFor:2.0];
+    XCTAssertTrue(NAWaitUntil(^BOOL { return !wc.isWorking && !wc.window.isVisible; }, 10.0),
+                 @"the cancelled extraction should be cleaned up and its window closed");
 
     XCTAssertFalse(wc.window.isVisible, @"window should close after cleanup");
     XCTAssertFalse([self fileExists:@"test" under:dir],
                   @"closing during extraction should remove the output");
 }
 
-- (void)spinRunLoopFor:(NSTimeInterval)seconds {
-    NSDate *timeout = [NSDate dateWithTimeIntervalSinceNow:seconds];
-    while ([[NSDate date] compare:timeout] == NSOrderedAscending) {
-        [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
-                                 beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.1]];
-    }
-}
 
 #pragma mark - Quarantine
 
@@ -219,7 +212,8 @@
     NAExtractionWindowController *wc =
         [[NAExtractionWindowController alloc] initWithArchivePath:archive];
     [wc beginExtraction];
-    [self spinRunLoopFor:3.0];
+    XCTAssertTrue(NAWaitUntil(^BOOL { return !wc.isWorking; }, 10.0),
+                 @"extraction should finish");
 
     NSString *dest = [dir stringByAppendingPathComponent:@"test"];
     NSString *extracted = nil;
@@ -253,7 +247,8 @@
     XCTAssertNotNil([wc valueForKey:@"activity"],
                    @"extraction should hold an NSProcessInfo activity");
 
-    [self spinRunLoopFor:3.0];
+    XCTAssertTrue(NAWaitUntil(^BOOL { return !wc.isWorking; }, 10.0),
+                 @"extraction should finish");
     XCTAssertNil([wc valueForKey:@"activity"],
                 @"the activity should end when the work is finished");
 }
@@ -364,8 +359,15 @@
 
     [wc beginExtraction];
 
-    // The error path is synchronous (no plugin found → immediate error display).
-    XCTAssertNotNil(wc.window);
+    XCTAssertTrue(NAWaitUntil(^BOOL { return !wc.isWorking; }, 10.0),
+                 @"extraction should finish");
+    NSButton *button = [wc valueForKey:@"cancelButton"];
+    NSTextField *status = [wc valueForKey:@"statusLabel"];
+    XCTAssertTrue([button.title isEqualToString:@"Close"],
+                 @"the button should offer Close after an error, got %@", button.title);
+    XCTAssertTrue(status.stringValue.length > 0 &&
+                 ![status.stringValue isEqualToString:@"Extracting…"],
+                 @"the status should show the error, got %@", status.stringValue);
 }
 
 @end
