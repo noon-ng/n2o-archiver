@@ -1,5 +1,6 @@
 #import <XCTest/XCTest.h>
 #import "NATestFixtures.h"
+#include <sys/stat.h>
 #import "NAPluginManager.h"
 #import "Plugins/NA7zExtractor.h"
 #import "Plugins/NA7zzTool.h"
@@ -39,6 +40,42 @@
 
 - (void)testToolPathFound {
     XCTAssertNotNil([NA7zzTool toolPath]);
+}
+
+#pragma mark - Tool selection and version
+
+- (void)testOnlyBinariesNamed7zzAreCandidates {
+    for (NSString *path in [NA7zzTool candidatePaths]) {
+        XCTAssertEqualObjects(path.lastPathComponent, @"7zz",
+                             @"%@ may be p7zip or another program, not 7zz", path);
+    }
+}
+
+- (void)testMinimumVersionIs2501 {
+    XCTAssertFalse([NA7zzTool isSupportedVersion:@"24.09"], @"24.09 predates the CVE-2025-11001 fix");
+    XCTAssertFalse([NA7zzTool isSupportedVersion:@"25.00"], @"25.00 predates the CVE-2025-55188 fix");
+    XCTAssertTrue([NA7zzTool isSupportedVersion:@"25.01"], @"25.01 is the minimum");
+    XCTAssertTrue([NA7zzTool isSupportedVersion:@"26.03"], @"later versions are accepted");
+    XCTAssertFalse([NA7zzTool isSupportedVersion:@"abc"], @"an unparseable version is rejected");
+    XCTAssertFalse([NA7zzTool isSupportedVersion:@""], @"an empty version is rejected");
+}
+
+- (void)testOldToolIsRejectedWithVersionInError {
+    NSString *fake = [self.destDir stringByAppendingPathComponent:@"7zz"];
+    [@"#!/bin/sh\necho '7-Zip (z) 24.09 (arm64) : Copyright (c) 1999-2024 Igor Pavlov : 2024-11-29'\n"
+        writeToFile:fake atomically:NO encoding:NSUTF8StringEncoding error:nil];
+    chmod(fake.fileSystemRepresentation, 0755);
+
+    XCTAssertEqualObjects([NA7zzTool versionOfToolAtPath:fake], @"24.09",
+                         @"the version should be read from the first output line");
+
+    NSError *error = nil;
+    NSString *path = [NA7zzTool toolPathFromCandidates:@[fake] error:&error];
+    XCTAssertNil(path, @"a 7zz older than 25.01 should not be used");
+    XCTAssertTrue([error.localizedDescription containsString:@"24.09"] &&
+                 [error.localizedDescription containsString:@"25.01"],
+                 @"the error should give the found and required versions, got %@",
+                 error.localizedDescription);
 }
 
 #pragma mark - Extraction

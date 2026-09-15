@@ -72,25 +72,104 @@ static NSString *const NA7zzErrorDomain = @"sh.n2o.archiver.7zz";
 
 @implementation NA7zzTool
 
-+ (nullable NSString *)toolPath {
-    static NSString *path;
+static NSString *const NA7zzMinimumVersion = @"25.01";
+
++ (NSArray<NSString *> *)candidatePaths {
+    return @[@"/opt/homebrew/bin/7zz", @"/usr/local/bin/7zz"];
+}
+
++ (void)resolveToolPath:(NSString **)path error:(NSError **)error {
+    static NSString *cachedPath;
+    static NSError *cachedError;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        NSArray<NSString *> *candidates = @[
-            @"/opt/homebrew/bin/7zz",
-            @"/usr/local/bin/7zz",
-            @"/opt/homebrew/bin/7z",
-            @"/usr/local/bin/7z",
-        ];
-        NSFileManager *fm = [NSFileManager defaultManager];
-        for (NSString *p in candidates) {
-            if ([fm isExecutableFileAtPath:p]) {
-                path = p;
-                return;
-            }
-        }
+        NSError *resolveError = nil;
+        cachedPath = [self toolPathFromCandidates:[self candidatePaths] error:&resolveError];
+        cachedError = cachedPath ? nil : resolveError;
     });
+    if (path) *path = cachedPath;
+    if (error) *error = cachedError;
+}
+
++ (nullable NSString *)toolPath {
+    NSString *path = nil;
+    [self resolveToolPath:&path error:NULL];
     return path;
+}
+
++ (nullable NSError *)toolError {
+    NSError *error = nil;
+    [self resolveToolPath:NULL error:&error];
+    return error;
+}
+
++ (nullable NSString *)toolPathFromCandidates:(NSArray<NSString *> *)candidates
+                                        error:(NSError **)error {
+    NSFileManager *fm = [NSFileManager defaultManager];
+    NSString *description = nil;
+    NSString *suggestion = @"Install it with “brew install sevenzip”.";
+
+    for (NSString *candidate in candidates) {
+        if (![fm isExecutableFileAtPath:candidate]) continue;
+
+        NSString *version = [self versionOfToolAtPath:candidate];
+        if (version && [self isSupportedVersion:version]) return candidate;
+
+        if (!description) {
+            description = version
+                ? [NSString stringWithFormat:
+                    @"7zz %@ at %@ is older than %@, the first version with fixes "
+                    @"for CVE-2025-11001, CVE-2025-11002 and CVE-2025-55188.",
+                    version, candidate, NA7zzMinimumVersion]
+                : [NSString stringWithFormat:
+                    @"The version of 7zz at %@ could not be determined.", candidate];
+            suggestion = @"Update it with “brew upgrade sevenzip”.";
+        }
+    }
+
+    if (error) {
+        if (!description) {
+            description = [NSString stringWithFormat:@"7zz was not found at %@.",
+                           [candidates componentsJoinedByString:@" or "]];
+        }
+        *error = [NSError errorWithDomain:NA7zzErrorDomain
+                                     code:1
+                                 userInfo:@{NSLocalizedDescriptionKey: description,
+                                            NSLocalizedRecoverySuggestionErrorKey: suggestion}];
+    }
+    return nil;
+}
+
++ (nullable NSString *)versionOfToolAtPath:(NSString *)path {
+    NSTask *task = [[NSTask alloc] init];
+    task.executableURL = [NSURL fileURLWithPath:path];
+    task.arguments = @[];
+    task.standardInput = [NSFileHandle fileHandleWithNullDevice];
+    task.standardError = [NSFileHandle fileHandleWithNullDevice];
+    NSPipe *outPipe = [NSPipe pipe];
+    task.standardOutput = outPipe;
+    if (![task launchAndReturnError:nil]) return nil;
+
+    NSData *output = [outPipe.fileHandleForReading readDataToEndOfFile];
+    [task waitUntilExit];
+
+    // First line, e.g. "7-Zip (z) 26.03 (arm64) : Copyright (c) 1999-2026 Igor Pavlov".
+    NSString *text = [[NSString alloc] initWithData:output encoding:NSUTF8StringEncoding];
+    NSRegularExpression *pattern =
+        [NSRegularExpression regularExpressionWithPattern:@"7-Zip[^0-9\\n]*([0-9]+\\.[0-9]+)"
+                                                  options:0
+                                                    error:nil];
+    NSTextCheckingResult *match =
+        text ? [pattern firstMatchInString:text options:0 range:NSMakeRange(0, text.length)] : nil;
+    return match ? [text substringWithRange:[match rangeAtIndex:1]] : nil;
+}
+
++ (BOOL)isSupportedVersion:(NSString *)version {
+    NSRange whole = NSMakeRange(0, version.length);
+    NSRegularExpression *pattern =
+        [NSRegularExpression regularExpressionWithPattern:@"^[0-9]+\\.[0-9]+$" options:0 error:nil];
+    if ([pattern numberOfMatchesInString:version options:0 range:whole] != 1) return NO;
+    return [version compare:NA7zzMinimumVersion options:NSNumericSearch] != NSOrderedAscending;
 }
 
 + (BOOL)extractArchiveAtPath:(NSString *)archivePath
@@ -208,12 +287,7 @@ static NSString *const NA7zzErrorDomain = @"sh.n2o.archiver.7zz";
                   error:(NSError **)error {
     NSString *tool = [self toolPath];
     if (!tool) {
-        if (error) {
-            *error = [NSError errorWithDomain:NA7zzErrorDomain
-                                         code:1
-                                     userInfo:@{NSLocalizedDescriptionKey:
-                                         @"7zz not found"}];
-        }
+        if (error) *error = [self toolError];
         return -1;
     }
 
