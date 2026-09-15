@@ -77,11 +77,13 @@ static BOOL NAIsUncompressedRaw(struct archive *a) {
     if (archive_read_open_filename(a, path.fileSystemRepresentation, 10240)
         == ARCHIVE_OK) {
         // "empty" bids on any zero-byte file and raw on any input, so a
-        // successful open alone does not indicate an archive.
+        // successful open alone does not indicate an archive. An archive must
+        // also yield an entry: ARCHIVE_EOF here means no entries (for example
+        // 1024 zero bytes read as an empty tar).
         struct archive_entry *entry;
         int r = archive_read_next_header(a, &entry);
         int format = archive_format(a) & ARCHIVE_FORMAT_BASE_MASK;
-        result = r >= ARCHIVE_WARN
+        result = (r == ARCHIVE_OK || r == ARCHIVE_WARN)
               && format != ARCHIVE_FORMAT_EMPTY
               && !NAIsUncompressedRaw(a);
     }
@@ -145,8 +147,26 @@ static BOOL NAIsUncompressedRaw(struct archive *a) {
 
     struct archive_entry *entry;
     BOOL success = YES;
+    NSUInteger entryCount = 0;
 
-    while (archive_read_next_header(a, &entry) == ARCHIVE_OK) {
+    for (;;) {
+        r = archive_read_next_header(a, &entry);
+        if (r == ARCHIVE_EOF) break;
+        // ARCHIVE_WARN covers recoverable problems, such as an entry name that
+        // cannot be converted to the current locale; the name's bytes are still
+        // available and are used. Any other result means the rest of the
+        // archive cannot be read, which is reported rather than treated as the
+        // end of the archive.
+        if (r != ARCHIVE_OK && r != ARCHIVE_WARN) {
+            [self setError:error fromArchive:a code:5];
+            success = NO;
+            break;
+        }
+        if (r == ARCHIVE_WARN) {
+            NSLog(@"N2OArchiver: header read warning: %s", archive_error_string(a));
+        }
+        entryCount++;
+
         if (self.cancelled) {
             [self setCancelledError:error];
             success = NO;
@@ -167,6 +187,12 @@ static BOOL NAIsUncompressedRaw(struct archive *a) {
         }
 
         const char *entryPath = archive_entry_pathname(entry);
+        if (!entryPath) {
+            [self setError:error description:@"An entry in the archive has no readable name."
+                      code:6];
+            success = NO;
+            break;
+        }
         _currentEntryName = (entryPath ? [NSString stringWithUTF8String:entryPath] : nil)
                             .lastPathComponent ?: @"";
 
@@ -212,6 +238,11 @@ static BOOL NAIsUncompressedRaw(struct archive *a) {
         success = NO;
     }
 
+    if (success && entryCount == 0) {
+        [self setError:error description:@"The archive contains no files." code:7];
+        success = NO;
+    }
+
     if (success && progressBlock) {
         progressBlock(1.0, _currentEntryName);
     }
@@ -241,7 +272,14 @@ static BOOL NAIsUncompressedRaw(struct archive *a) {
 
     NSMutableArray<NSString *> *entries = [NSMutableArray array];
     struct archive_entry *entry;
-    while (archive_read_next_header(a, &entry) == ARCHIVE_OK) {
+    for (;;) {
+        r = archive_read_next_header(a, &entry);
+        if (r == ARCHIVE_EOF) break;
+        if (r != ARCHIVE_OK && r != ARCHIVE_WARN) {
+            [self setError:error fromArchive:a code:5];
+            archive_read_free(a);
+            return nil;
+        }
         if (NAIsUncompressedRaw(a)) {
             [self setError:error description:@"Unrecognized archive format" code:4];
             archive_read_free(a);

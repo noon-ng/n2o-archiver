@@ -310,6 +310,46 @@
     return st.st_mode & 07777;
 }
 
+#pragma mark - Read errors and empty archives
+
+- (void)testNonASCIIEntryNamesAreExtracted {
+    NSError *error = nil;
+    BOOL ok = [self.extractor extractArchiveAtPath:[NATestFixtures pathForFixture:@"non-ascii-names.tar"]
+                                     toDestination:self.destDir
+                                          progress:nil
+                                             error:&error];
+    NAAssertTrue(ok, @"extraction should succeed: %@", error.localizedDescription);
+    for (NSString *name in @[@"café.txt", @"naïve/résumé.txt", @"after.txt"]) {
+        NAAssertTrue([[NSFileManager defaultManager] fileExistsAtPath:
+                      [self.destDir stringByAppendingPathComponent:name]],
+                     @"%@ should be extracted", name);
+    }
+}
+
+- (void)testArchiveWithoutEntriesIsNotClaimedOrExtracted {
+    NSString *path = [NATestFixtures pathForFixture:@"zero-blocks.zip"];
+    NAAssertFalse([NALibarchiveExtractor canHandleFileAtPath:path],
+                  @"1024 zero bytes have no entry and should not be claimed");
+
+    NSError *error = nil;
+    BOOL ok = [self.extractor extractArchiveAtPath:path toDestination:self.destDir
+                                          progress:nil error:&error];
+    NAAssertFalse(ok, @"an archive without entries should not report success");
+    NAAssertTrue([error.localizedDescription containsString:@"no files"],
+                 @"the error should say the archive contains no files, got %@",
+                 error.localizedDescription);
+}
+
+- (void)testDamagedHeaderReportsFailure {
+    NSError *error = nil;
+    BOOL ok = [self.extractor extractArchiveAtPath:[NATestFixtures pathForFixture:@"damaged-header.tar"]
+                                     toDestination:self.destDir
+                                          progress:nil
+                                             error:&error];
+    NAAssertFalse(ok, @"a damaged header after the first entry should not report success");
+    NAAssertNotNil(error, @"the read error should be reported");
+}
+
 #pragma mark - Cancellation
 
 - (void)testCancelStopsExtractionAfterCurrentEntry {
