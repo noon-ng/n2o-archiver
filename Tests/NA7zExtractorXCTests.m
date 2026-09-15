@@ -145,6 +145,73 @@
                          @"entries should carry the file name, got %@", entries);
 }
 
+- (void)testListContentsExcludesArchivePath {
+    NSString *path = [NATestFixtures pathForFixture:@"test.7z"];
+    NSError *error = nil;
+    NSArray<NSString *> *entries = [self.extractor contentsOfArchiveAtPath:path error:&error];
+    NSSet *expected = [NSSet setWithObjects:@"src", @"src/subdir", @"src/a.txt", @"src/b.txt", @"src/subdir/c.txt", nil];
+    XCTAssertEqualObjects([NSSet setWithArray:entries], expected,
+                         @"entries should be the archive members only, got %@ (%@)",
+                         entries, error);
+}
+
+- (void)testExtractRelativePathStartingWithDash {
+    NSFileManager *fm = [NSFileManager defaultManager];
+    NSString *workDir = [self.destDir stringByAppendingPathComponent:@"work"];
+    NSString *outDir = [self.destDir stringByAppendingPathComponent:@"out"];
+    [fm createDirectoryAtPath:workDir withIntermediateDirectories:YES attributes:nil error:nil];
+    [fm createDirectoryAtPath:outDir withIntermediateDirectories:YES attributes:nil error:nil];
+    [fm copyItemAtPath:[NATestFixtures pathForFixture:@"test.7z"]
+                toPath:[workDir stringByAppendingPathComponent:@"-test.7z"] error:nil];
+
+    // 7zz reads an argument starting with "-" as a switch unless it follows "--".
+    NSString *previousDir = fm.currentDirectoryPath;
+    [fm changeCurrentDirectoryPath:workDir];
+    NSError *error = nil;
+    BOOL ok = [self.extractor extractArchiveAtPath:@"-test.7z"
+                                     toDestination:outDir
+                                          progress:nil
+                                             error:&error];
+    [fm changeCurrentDirectoryPath:previousDir];
+
+    XCTAssertTrue(ok, @"archive path starting with - should extract: %@",
+                 error.localizedDescription);
+}
+
+- (void)testEncryptedArchiveFailsWithPasswordError {
+    NSString *path = [NATestFixtures pathForFixture:@"encrypted.7z"];
+    NA7zExtractor *extractor = self.extractor;
+    NSString *dest = self.destDir;
+    __block BOOL ok = YES;
+    __block NSError *error = nil;
+    dispatch_semaphore_t done = dispatch_semaphore_create(0);
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        NSError *e = nil;
+        ok = [extractor extractArchiveAtPath:path toDestination:dest progress:nil error:&e];
+        error = e;
+        dispatch_semaphore_signal(done);
+    });
+    long timedOut = dispatch_semaphore_wait(done,
+        dispatch_time(DISPATCH_TIME_NOW, (int64_t)(20 * NSEC_PER_SEC)));
+    if (timedOut) [extractor cancelExtraction];
+
+    XCTAssertFalse(timedOut, @"extraction should not wait for a password");
+    XCTAssertFalse(ok, @"encrypted archive should fail");
+    XCTAssertTrue([error.localizedDescription rangeOfString:@"password-protected"].location != NSNotFound,
+                 @"error should say the archive is password-protected, got %@",
+                 error.localizedDescription);
+}
+
+- (void)testListEncryptedArchiveFailsWithPasswordError {
+    NSError *error = nil;
+    NSArray *entries = [self.extractor contentsOfArchiveAtPath:
+        [NATestFixtures pathForFixture:@"encrypted.7z"] error:&error];
+    XCTAssertNil(entries, @"listing an encrypted archive should fail");
+    XCTAssertTrue([error.localizedDescription rangeOfString:@"password-protected"].location != NSNotFound,
+                 @"error should say the archive is password-protected, got %@",
+                 error.localizedDescription);
+}
+
 #pragma mark - Cancellation
 
 - (void)testCancelBeforeExtractionReturnsCancelled {

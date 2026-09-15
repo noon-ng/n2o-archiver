@@ -103,61 +103,31 @@ static NSString *const NA7zzErrorDomain = @"sh.n2o.archiver.7zz";
         return NO;
     }
 
-    NSString *tool = [self toolPath];
-    if (!tool) {
-        if (error) {
-            *error = [NSError errorWithDomain:NA7zzErrorDomain
-                                         code:1
-                                     userInfo:@{NSLocalizedDescriptionKey:
-                                         @"7zz not found"}];
-        }
-        return NO;
-    }
-
-    NSTask *task = [[NSTask alloc] init];
-    task.executableURL = [NSURL fileURLWithPath:tool];
-    // -bsp1 sends progress to stdout even when stdout is not a terminal.
-    task.arguments = @[@"x", @"-y", @"-bsp1",
-                       [NSString stringWithFormat:@"-o%@", destPath],
-                       archivePath];
-
-    NSPipe *outPipe = [NSPipe pipe];
-    NSPipe *errPipe = [NSPipe pipe];
-    task.standardOutput = outPipe;
-    task.standardError = errPipe;
-
-    NSError *launchError = nil;
-    if (![task launchAndReturnError:&launchError]) {
-        if (error) *error = launchError;
-        return NO;
-    }
-
-    // stdout is always read, so 7zz cannot block on a full pipe. The handler
-    // runs on a file handle queue, not the calling thread.
     __block NSString *lastEntry = @"";
     NA7zzProgressParser *parser =
         [[NA7zzProgressParser alloc] initWithHandler:^(double fraction, NSString *entry) {
         lastEntry = entry;
         if (progressBlock) progressBlock(fraction, entry);
     }];
-    NSFileHandle *outHandle = outPipe.fileHandleForReading;
-    outHandle.readabilityHandler = ^(NSFileHandle *fh) {
-        [parser appendData:[fh availableData]];
-    };
 
-    // Poll for cancellation while 7zz runs.
+    // -bsp1 sends progress to stdout even when stdout is not a terminal.
+    NSArray<NSString *> *arguments = @[
+        // "-p" with no value supplies an empty password, so an encrypted
+        // archive fails instead of prompting.
+        @"x", @"-y", @"-bsp1", @"-p",
+        [NSString stringWithFormat:@"-o%@", destPath],
+        @"--", archivePath
+    ];
+
     BOOL cancelled = NO;
-    while (task.isRunning) {
-        if (isCancelled && isCancelled()) {
-            cancelled = YES;
-            [task terminate];
-            break;
-        }
-        [NSThread sleepForTimeInterval:0.05];
-    }
-    [task waitUntilExit];
-    outHandle.readabilityHandler = nil;
-    [parser appendData:[outHandle readDataToEndOfFile]];
+    NSData *stderrData = nil;
+    int status = [self runWithArguments:arguments
+                          stdoutHandler:^(NSData *data) { [parser appendData:data]; }
+                            isCancelled:isCancelled
+                              cancelled:&cancelled
+                             stderrData:&stderrData
+                                  error:error];
+    if (status < 0) return NO;
 
     // The cancel may arrive after 7zz has exited; report it so the caller
     // treats the output as cancelled.
@@ -166,16 +136,9 @@ static NSString *const NA7zzErrorDomain = @"sh.n2o.archiver.7zz";
         return NO;
     }
 
-    if (task.terminationStatus != 0) {
-        NSData *errData = [errPipe.fileHandleForReading readDataToEndOfFile];
-        NSString *errMsg = [[NSString alloc] initWithData:errData
-                                                 encoding:NSUTF8StringEncoding]
-                           ?: @"7zz extraction failed";
-        if (error) {
-            *error = [NSError errorWithDomain:NA7zzErrorDomain
-                                         code:task.terminationStatus
-                                     userInfo:@{NSLocalizedDescriptionKey: errMsg}];
-        }
+    if (status != 0) {
+        if (error) *error = [self errorForStatus:status stderrData:stderrData
+                                        fallback:@"7zz extraction failed"];
         return NO;
     }
 
@@ -190,6 +153,54 @@ static NSString *const NA7zzErrorDomain = @"sh.n2o.archiver.7zz";
 
 + (nullable NSArray<NSString *> *)contentsOfArchiveAtPath:(NSString *)path
                                                     error:(NSError **)error {
+    NSMutableData *output = [NSMutableData data];
+    NSData *stderrData = nil;
+    int status = [self runWithArguments:@[@"l", @"-slt", @"-p", @"--", path]
+                          stdoutHandler:^(NSData *data) { [output appendData:data]; }
+                            isCancelled:nil
+                              cancelled:NULL
+                             stderrData:&stderrData
+                                  error:error];
+    if (status < 0) return nil;
+    if (status != 0) {
+        if (error) *error = [self errorForStatus:status stderrData:stderrData
+                                        fallback:@"7zz listing failed"];
+        return nil;
+    }
+
+    NSString *text = [[NSString alloc] initWithData:output encoding:NSUTF8StringEncoding];
+    if (!text) return @[];
+
+    // `l -slt` prints a block describing the archive itself (including its own
+    // "Path = " line), then a "----------" line, then one block per member.
+    NSMutableArray<NSString *> *entries = [NSMutableArray array];
+    BOOL inMembers = NO;
+    for (NSString *line in [text componentsSeparatedByString:@"\n"]) {
+        if (!inMembers) {
+            if ([line hasPrefix:@"----------"]) inMembers = YES;
+            continue;
+        }
+        if ([line hasPrefix:@"Path = "]) {
+            NSString *entry = [line substringFromIndex:7];
+            if (entry.length > 0) [entries addObject:entry];
+        }
+    }
+    return entries;
+}
+
+#pragma mark - Private
+
+// Runs 7zz with stdin on /dev/null, so a prompt reads end-of-file instead of
+// waiting; callers also pass "-p" so no prompt is shown. stdout is passed to stdoutHandler as it
+// arrives and stderr is collected, both while the process runs, so neither
+// pipe can fill. Polls isCancelled every 50 ms and terminates 7zz when it
+// returns YES. Returns the exit status, or -1 if 7zz could not be started.
++ (int)runWithArguments:(NSArray<NSString *> *)arguments
+          stdoutHandler:(void (^)(NSData *data))stdoutHandler
+            isCancelled:(nullable BOOL (^)(void))isCancelled
+              cancelled:(nullable BOOL *)cancelled
+             stderrData:(NSData **)stderrData
+                  error:(NSError **)error {
     NSString *tool = [self toolPath];
     if (!tool) {
         if (error) {
@@ -198,44 +209,89 @@ static NSString *const NA7zzErrorDomain = @"sh.n2o.archiver.7zz";
                                      userInfo:@{NSLocalizedDescriptionKey:
                                          @"7zz not found"}];
         }
-        return nil;
+        return -1;
     }
 
     NSTask *task = [[NSTask alloc] init];
     task.executableURL = [NSURL fileURLWithPath:tool];
-    task.arguments = @[@"l", @"-slt", path];
+    task.arguments = arguments;
+    task.standardInput = [NSFileHandle fileHandleWithNullDevice];
 
     NSPipe *outPipe = [NSPipe pipe];
+    NSPipe *errPipe = [NSPipe pipe];
     task.standardOutput = outPipe;
-    task.standardError = [NSPipe pipe];
+    task.standardError = errPipe;
+
+    NSMutableData *errData = [NSMutableData data];
+    NSFileHandle *outHandle = outPipe.fileHandleForReading;
+    NSFileHandle *errHandle = errPipe.fileHandleForReading;
+    // The handlers run on file handle queues, not the calling thread.
+    outHandle.readabilityHandler = ^(NSFileHandle *fh) {
+        NSData *data = [fh availableData];
+        if (data.length > 0) stdoutHandler(data);
+    };
+    errHandle.readabilityHandler = ^(NSFileHandle *fh) {
+        NSData *data = [fh availableData];
+        if (data.length > 0) {
+            @synchronized (errData) { [errData appendData:data]; }
+        }
+    };
 
     NSError *launchError = nil;
     if (![task launchAndReturnError:&launchError]) {
+        outHandle.readabilityHandler = nil;
+        errHandle.readabilityHandler = nil;
         if (error) *error = launchError;
-        return nil;
+        return -1;
     }
 
-    NSData *outData = [outPipe.fileHandleForReading readDataToEndOfFile];
+    BOOL didCancel = NO;
+    while (task.isRunning) {
+        if (isCancelled && isCancelled()) {
+            didCancel = YES;
+            [task terminate];
+            break;
+        }
+        [NSThread sleepForTimeInterval:0.05];
+    }
     [task waitUntilExit];
 
-    NSString *output = [[NSString alloc] initWithData:outData
-                                             encoding:NSUTF8StringEncoding];
-    if (!output) return @[];
+    outHandle.readabilityHandler = nil;
+    errHandle.readabilityHandler = nil;
+    NSData *outRest = [outHandle readDataToEndOfFile];
+    if (outRest.length > 0) stdoutHandler(outRest);
+    NSData *errRest = [errHandle readDataToEndOfFile];
 
-    NSMutableArray<NSString *> *entries = [NSMutableArray array];
-    for (NSString *line in [output componentsSeparatedByString:@"\n"]) {
-        if ([line hasPrefix:@"Path = "]) {
-            NSString *entry = [line substringFromIndex:7];
-            if (entry.length > 0 && ![entry isEqualToString:path.lastPathComponent]) {
-                [entries addObject:entry];
-            }
+    if (cancelled) *cancelled = didCancel;
+    if (stderrData) {
+        @synchronized (errData) {
+            [errData appendData:errRest];
+            *stderrData = [errData copy];
         }
     }
-
-    return entries;
+    return task.terminationStatus;
 }
 
-#pragma mark - Private
++ (NSError *)errorForStatus:(int)status
+                 stderrData:(NSData *)stderrData
+                   fallback:(NSString *)fallback {
+    NSString *text = [[[NSString alloc] initWithData:stderrData encoding:NSUTF8StringEncoding]
+        stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+
+    // With an empty "-p", 7zz reports encrypted content as a wrong password.
+    NSString *description;
+    if ([text rangeOfString:@"Wrong password"].location != NSNotFound) {
+        description = @"The archive is password-protected. "
+                      @"N2O Archiver cannot extract password-protected archives yet.";
+    } else {
+        description = text.length > 0 ? text : fallback;
+    }
+
+    NSMutableDictionary *userInfo = [@{NSLocalizedDescriptionKey: description} mutableCopy];
+    if (text.length > 0) userInfo[NSLocalizedFailureReasonErrorKey] = text;
+    return [NSError errorWithDomain:NA7zzErrorDomain code:status userInfo:userInfo];
+}
+
 
 + (void)setCancelledError:(NSError **)error {
     if (!error) return;

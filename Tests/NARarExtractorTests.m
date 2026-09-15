@@ -104,6 +104,16 @@
     NAAssertTrue(lastFraction == 1.0, @"last progress should be 1.0, got %f", lastFraction);
 }
 
+- (void)testListContentsExcludesArchivePath {
+    NSString *path = [NATestFixtures pathForFixture:@"test.rar"];
+    NSError *error = nil;
+    NSArray<NSString *> *entries = [self.extractor contentsOfArchiveAtPath:path error:&error];
+    NSSet *expected = [NSSet setWithObjects:@"src/a.txt", @"src/b.txt", @"src/subdir/c.txt", nil];
+    NAAssertEqualObjects([NSSet setWithArray:entries], expected,
+                         @"entries should be the archive members only, got %@ (%@)",
+                         entries, error);
+}
+
 #pragma mark - Cancellation
 
 - (void)testCancelBeforeExtractionReturnsCancelled {
