@@ -29,7 +29,8 @@ static const char *const kValue = "0083;00000000;N2OArchiverTests;";
         struct stat st;
         if (lstat(path.fileSystemRepresentation, &st) == 0 && !S_ISLNK(st.st_mode)) {
             chflags(path.fileSystemRepresentation, 0);
-            chmod(path.fileSystemRepresentation, (st.st_mode & 07777) | S_IWUSR);
+            chmod(path.fileSystemRepresentation,
+                  (st.st_mode & 07777) | (S_ISDIR(st.st_mode) ? 0700 : S_IWUSR));
         }
     }
     [fm removeItemAtPath:self.workDir error:nil];
@@ -125,6 +126,41 @@ static const char *const kValue = "0083;00000000;N2OArchiverTests;";
                  error.localizedRecoverySuggestion);
     XCTAssertEqualObjects([self quarantineAtPath:[root stringByAppendingPathComponent:@"plain.txt"]],
                          @(kValue), @"other items should still be marked");
+}
+
+- (void)testMarksItemsInsideUnreadableDirectory {
+    NSString *archive = [self writeFile:@"archive.zip"];
+    setxattr(archive.fileSystemRepresentation, "com.apple.quarantine",
+             kValue, strlen(kValue), 0, 0);
+    NSString *root = [self.workDir stringByAppendingPathComponent:@"out"];
+    [self writeFile:@"out/locked/inside.txt"];
+    NSString *locked = [root stringByAppendingPathComponent:@"locked"];
+    chmod(locked.fileSystemRepresentation, 0000);
+
+    NSError *error = nil;
+    BOOL ok = [NAQuarantine copyQuarantineFromPath:archive toTreeAtPath:root error:&error];
+
+    XCTAssertTrue(ok, @"an unreadable directory should be made listable and marked: %@", error);
+    XCTAssertEqualObjects([self quarantineAtPath:[locked stringByAppendingPathComponent:@"inside.txt"]],
+                         @(kValue), @"the file inside the unreadable directory should be marked");
+}
+
+- (void)testReportsDirectoryThatCannotBeListed {
+    NSString *archive = [self writeFile:@"archive.zip"];
+    setxattr(archive.fileSystemRepresentation, "com.apple.quarantine",
+             kValue, strlen(kValue), 0, 0);
+    NSString *root = [self.workDir stringByAppendingPathComponent:@"out"];
+    [self writeFile:@"out/sealed/inside.txt"];
+    NSString *sealed = [root stringByAppendingPathComponent:@"sealed"];
+    chmod(sealed.fileSystemRepresentation, 0000);
+    chflags(sealed.fileSystemRepresentation, UF_IMMUTABLE);
+
+    NSError *error = nil;
+    BOOL ok = [NAQuarantine copyQuarantineFromPath:archive toTreeAtPath:root error:&error];
+
+    XCTAssertFalse(ok, @"a directory that cannot be listed should be reported, not skipped");
+    XCTAssertEqualObjects(error.userInfo[NSFilePathErrorKey], sealed,
+                         @"the error should name the directory, got %@", error);
 }
 
 #pragma mark - Helpers

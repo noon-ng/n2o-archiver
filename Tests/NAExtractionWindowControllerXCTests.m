@@ -2,17 +2,59 @@
 #import "NATestFixtures.h"
 #import "NAWait.h"
 #import "NAExtractionWindowController.h"
+#include <sys/stat.h>
 #include <sys/xattr.h>
 #import "NAPluginManager.h"
 #import "Plugins/NALibarchiveExtractor.h"
+
+// Extractor for files ending in .n2oscripted. An archive named wait… blocks
+// until NAScriptedRelease is signalled, so tests can observe an extraction in
+// progress; one named immutable… writes a file with UF_IMMUTABLE and fails.
+static dispatch_semaphore_t NAScriptedRelease;
+
+@interface NATestScriptedExtractor : NSObject <NAExtractorPlugin>
+@end
+
+@implementation NATestScriptedExtractor
+
++ (NSArray<NSString *> *)supportedExtensions { return @[@"n2oscripted"]; }
++ (NSArray<NSString *> *)supportedUTIs { return @[]; }
++ (BOOL)canHandleFileAtPath:(NSString *)path {
+    return [path.pathExtension isEqualToString:@"n2oscripted"];
+}
+
+- (BOOL)extractArchiveAtPath:(NSString *)archivePath
+               toDestination:(NSString *)destPath
+                    progress:(NAExtractionProgressBlock)progressBlock
+                       error:(NSError **)error {
+    NSString *file = [destPath stringByAppendingPathComponent:@"payload.txt"];
+    [@"payload" writeToFile:file atomically:NO encoding:NSUTF8StringEncoding error:nil];
+    NSString *name = archivePath.lastPathComponent;
+    if ([name hasPrefix:@"wait"]) {
+        dispatch_semaphore_wait(NAScriptedRelease,
+                                dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10 * NSEC_PER_SEC)));
+    } else if ([name hasPrefix:@"immutable"]) {
+        chflags(file.fileSystemRepresentation, UF_IMMUTABLE);
+        if (error) {
+            *error = [NSError errorWithDomain:@"NATestScriptedExtractor" code:1
+                                     userInfo:@{NSLocalizedDescriptionKey:
+                                                    @"Scripted extraction failure."}];
+        }
+        return NO;
+    }
+    return YES;
+}
+
+@end
 
 @interface NAExtractionWindowControllerXCTests : XCTestCase
 @end
 
 // Private methods under test.
 @interface NAExtractionWindowController (Testing)
-- (NSString *)createDestinationForArchive:(NSString *)archivePath
-                                    error:(NSError **)error;
+- (NSString *)moveStagingDirectory:(NSString *)stagingPath
+           toDestinationForArchive:(NSString *)archivePath
+                             error:(NSError **)error;
 - (void)unwrapSingleItemDirectoryAtPath:(NSString *)destPath;
 - (BOOL)windowShouldClose:(NSWindow *)sender;
 @end
@@ -26,6 +68,15 @@
 
 - (void)tearDown {
     if (self.unwrapDir) {
+        // Clear flags and restore owner access left by tests.
+        for (NSString *item in [[NSFileManager defaultManager] enumeratorAtPath:self.unwrapDir]) {
+            const char *path = [self.unwrapDir stringByAppendingPathComponent:item].fileSystemRepresentation;
+            struct stat st;
+            if (lstat(path, &st) == 0 && !S_ISLNK(st.st_mode)) {
+                chflags(path, 0);
+                chmod(path, (st.st_mode & 0777) | (S_ISDIR(st.st_mode) ? 0700 : 0600));
+            }
+        }
         [[NSFileManager defaultManager] removeItemAtPath:self.unwrapDir error:nil];
         self.unwrapDir = nil;
     }
@@ -43,6 +94,7 @@
 - (void)setUp {
     [super setUp];
     [[NAPluginManager sharedManager] registerBuiltinClass:[NALibarchiveExtractor class]];
+    [[NAPluginManager sharedManager] registerBuiltinClass:[NATestScriptedExtractor class]];
 }
 
 #pragma mark - Initialization
@@ -85,32 +137,101 @@
     [[NSFileManager defaultManager] removeItemAtPath:dest error:nil];
 }
 
+#pragma mark - Staging directory
+
+- (void)testOutputIsExtractedIntoHiddenStagingDirectory {
+    NSString *dir = [self makeUnwrapDestination];
+    [self writeFile:@"wait.n2oscripted" under:dir];
+    NSString *archive = [dir stringByAppendingPathComponent:@"wait.n2oscripted"];
+    const char *value = "0083;00000000;N2OArchiverTests;";
+    setxattr(archive.fileSystemRepresentation, "com.apple.quarantine", value, strlen(value), 0, 0);
+    NAScriptedRelease = dispatch_semaphore_create(0);
+
+    NAExtractionWindowController *wc =
+        [[NAExtractionWindowController alloc] initWithArchivePath:archive];
+    [wc beginExtraction];
+
+    XCTAssertTrue(NAWaitUntil(^BOOL {
+        for (NSString *staging in [self stagingDirectoriesIn:dir]) {
+            if ([self fileExists:[staging stringByAppendingPathComponent:@"payload.txt"] under:dir]) return YES;
+        }
+        return NO;
+    }, 10.0), @"files should be written into a hidden .n2o-extract- directory");
+    XCTAssertFalse([self fileExists:@"wait" under:dir],
+                  @"the visible output folder should not exist while extracting");
+
+    dispatch_semaphore_signal(NAScriptedRelease);
+    XCTAssertTrue(NAWaitUntil(^BOOL { return !wc.isWorking; }, 10.0), @"extraction should finish");
+
+    XCTAssertTrue([self fileExists:@"wait/payload.txt" under:dir],
+                 @"the staging directory should be renamed to the archive's base name");
+    XCTAssertEqual([self stagingDirectoriesIn:dir].count, 0u, @"no staging directory should remain");
+    char buffer[256];
+    ssize_t length = getxattr([dir stringByAppendingPathComponent:@"wait/payload.txt"].fileSystemRepresentation,
+                              "com.apple.quarantine", buffer, sizeof(buffer), 0, XATTR_NOFOLLOW);
+    XCTAssertTrue(length > 0, @"the file should be quarantined before it gets its visible name");
+}
+
+- (void)testFailedExtractionAlsoReportsQuarantineFailure {
+    NSString *dir = [self makeUnwrapDestination];
+    [self writeFile:@"immutable.n2oscripted" under:dir];
+    NSString *archive = [dir stringByAppendingPathComponent:@"immutable.n2oscripted"];
+    const char *value = "0083;00000000;N2OArchiverTests;";
+    setxattr(archive.fileSystemRepresentation, "com.apple.quarantine", value, strlen(value), 0, 0);
+
+    NAExtractionWindowController *wc =
+        [[NAExtractionWindowController alloc] initWithArchivePath:archive];
+    [wc beginExtraction];
+    XCTAssertTrue(NAWaitUntil(^BOOL { return !wc.isWorking && wc.window.attachedSheet != nil; }, 10.0),
+                 @"the failure should be presented");
+
+    NSError *shown = [wc valueForKey:@"presentedError"];
+    XCTAssertTrue([shown.localizedRecoverySuggestion containsString:@"Scripted extraction failure."],
+                 @"the extraction error should be shown, got %@", shown.localizedRecoverySuggestion);
+    XCTAssertTrue([shown.localizedRecoverySuggestion containsString:@"could not be marked as downloaded"],
+                 @"the quarantine failure should also be shown, got %@", shown.localizedRecoverySuggestion);
+    [wc.window endSheet:wc.window.attachedSheet returnCode:NSAlertFirstButtonReturn];
+}
+
+- (NSArray<NSString *> *)stagingDirectoriesIn:(NSString *)dir {
+    NSArray *items = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:dir error:nil];
+    return [items filteredArrayUsingPredicate:
+        [NSPredicate predicateWithFormat:@"SELF BEGINSWITH '.n2o-extract-'"]];
+}
+
 #pragma mark - Destination directory
 
 - (void)testDestinationUsesArchiveBaseName {
     NSString *dir = [self makeUnwrapDestination];
     NSString *archive = [self copyFixture:@"test.zip" to:@"test.zip" under:dir];
+    [self writeFile:@".n2o-extract-staging/a.txt" under:dir];
 
     NSError *error = nil;
-    NSString *dest = [self.unwrapController createDestinationForArchive:archive
-                                                                   error:&error];
+    NSString *dest = [self.unwrapController
+        moveStagingDirectory:[dir stringByAppendingPathComponent:@".n2o-extract-staging"]
+     toDestinationForArchive:archive
+                       error:&error];
 
     XCTAssertEqualObjects(dest, [dir stringByAppendingPathComponent:@"test"],
                          @"destination should be the archive base name, got %@ (%@)",
                          dest, error);
-    XCTAssertTrue([self fileExists:@"test" under:dir], @"destination should be created");
+    XCTAssertTrue([self fileExists:@"test/a.txt" under:dir], @"staging contents should move");
+    XCTAssertFalse([self fileExists:@".n2o-extract-staging" under:dir], @"staging should be gone");
 }
 
 - (void)testDestinationSkipsExistingDirectory {
     NSString *dir = [self makeUnwrapDestination];
     NSString *archive = [self copyFixture:@"test.zip" to:@"test.zip" under:dir];
     [self writeFile:@"test/keep.txt" under:dir];
+    [self writeFile:@".n2o-extract-staging/a.txt" under:dir];
 
-    NSString *dest = [self.unwrapController createDestinationForArchive:archive
-                                                                   error:nil];
+    NSString *dest = [self.unwrapController
+        moveStagingDirectory:[dir stringByAppendingPathComponent:@".n2o-extract-staging"]
+     toDestinationForArchive:archive
+                       error:nil];
 
     XCTAssertEqualObjects(dest, [dir stringByAppendingPathComponent:@"test 2"],
-                         @"existing directory should not be reused, got %@", dest);
+                         @"existing directory should not be replaced, got %@", dest);
     XCTAssertEqual([[NSFileManager defaultManager]
                       contentsOfDirectoryAtPath:[dir stringByAppendingPathComponent:@"test"]
                                           error:nil].count, 1u,
@@ -120,13 +241,15 @@
 - (void)testDestinationSkipsArchiveWithoutExtension {
     NSString *dir = [self makeUnwrapDestination];
     NSString *archive = [self copyFixture:@"test.zip" to:@"mystery" under:dir];
+    [self writeFile:@".n2o-extract-staging/a.txt" under:dir];
 
-    NSString *dest = [self.unwrapController createDestinationForArchive:archive
-                                                                   error:nil];
+    NSString *dest = [self.unwrapController
+        moveStagingDirectory:[dir stringByAppendingPathComponent:@".n2o-extract-staging"]
+     toDestinationForArchive:archive
+                       error:nil];
 
     XCTAssertEqualObjects(dest, [dir stringByAppendingPathComponent:@"mystery 2"],
-                         @"archive file itself should not be used as destination, got %@",
-                         dest);
+                         @"archive file itself should not be replaced, got %@", dest);
 }
 
 - (void)testCancelKeepsExistingDirectory {
@@ -146,6 +269,8 @@
                  @"cancel should not remove a directory that existed before extraction");
     XCTAssertFalse([self fileExists:@"test 2" under:dir],
                   @"cancel should remove the directory created for the extraction");
+    XCTAssertEqual([self stagingDirectoriesIn:dir].count, 0u,
+                  @"cancel should remove the staging directory");
 }
 
 - (NSString *)copyFixture:(NSString *)fixture to:(NSString *)name under:(NSString *)dir {
@@ -274,7 +399,9 @@
 
     [wc.window endSheet:wc.window.attachedSheet returnCode:NSAlertFirstButtonReturn];
     XCTAssertTrue(NAWaitUntil(^BOOL { return !wc.window.isVisible; }, 10.0),
-                 @"dismissing the error should close the window");
+                 @"dismissing the error should close the window");    XCTAssertFalse([self fileExists:@"broken" under:dir],
+                  @"a failed extraction that wrote nothing should leave no folder");
+    XCTAssertEqual([self stagingDirectoriesIn:dir].count, 0u, @"no staging directory should remain");
 }
 
 #pragma mark - Unwrapping a single top-level directory

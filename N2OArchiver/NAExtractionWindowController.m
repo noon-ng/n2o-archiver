@@ -1,6 +1,7 @@
 #import "NAExtractionWindowController.h"
 #import "NAPluginManager.h"
 #import "NAQuarantine.h"
+#include <stdio.h>
 #include <sys/stat.h>
 
 @interface NAExtractionWindowController () <NSWindowDelegate>
@@ -51,9 +52,9 @@
     }
 
     NSError *dirError = nil;
-    NSString *destPath = [self createDestinationForArchive:self.archivePath
-                                                     error:&dirError];
-    if (!destPath) {
+    NSString *stagingPath = [self createStagingDirectoryForArchive:self.archivePath
+                                                             error:&dirError];
+    if (!stagingPath) {
         NSMutableDictionary *userInfo = [@{
             NSLocalizedDescriptionKey:
                 @"The folder for the extracted files could not be created next to the archive.",
@@ -80,7 +81,7 @@
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         NSError *error = nil;
         BOOL ok = [extractor extractArchiveAtPath:archivePath
-                                    toDestination:destPath
+                                    toDestination:stagingPath
                                          progress:^(double fraction, NSString *entry) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 __strong typeof(weakSelf) s = weakSelf;
@@ -91,14 +92,13 @@
         }
                                             error:&error];
 
-        // Mark everything extracted, including partial output from a failed
-        // extraction, with the archive's quarantine value. Cancelled output is
-        // removed instead.
+        // Mark everything written, including partial and cancelled output,
+        // while it is still in the hidden staging directory. If the app stops
+        // during extraction, unmarked files are left only in that directory.
         NSError *quarantineError = nil;
-        BOOL quarantined = weakSelf.cancelled ||
-            [NAQuarantine copyQuarantineFromPath:archivePath
-                                    toTreeAtPath:destPath
-                                           error:&quarantineError];
+        BOOL quarantined = [NAQuarantine copyQuarantineFromPath:archivePath
+                                                   toTreeAtPath:stagingPath
+                                                          error:&quarantineError];
 
         dispatch_async(dispatch_get_main_queue(), ^{
             __strong typeof(weakSelf) s = weakSelf;
@@ -106,33 +106,104 @@
             s.extractor = nil;
 
             if (s.cancelled) {
-                [s removeCancelledOutputAtPath:destPath];
-            } else if (ok && !quarantined) {
-                s.working = NO;
-                [s presentError:quarantineError
-                          title:[NSString stringWithFormat:
-                    @"“%@” was extracted, but some files are not marked as downloaded.",
-                    s.archivePath.lastPathComponent]];
-            } else if (ok) {
-                s.working = NO;
-                [s extractionFinishedAtPath:destPath];
+                [s removeCancelledOutputAtPath:stagingPath];
             } else {
-                s.working = NO;
-                [s presentError:error title:[s failureTitle]];
+                [s finishExtractionInStagingDirectory:stagingPath
+                                            succeeded:ok
+                                                error:error
+                                      quarantineError:quarantined ? nil : quarantineError];
             }
         });
     });
 }
 
+// Unwraps a successful extraction, moves the staging directory to its visible
+// name and reports the result. A failed extraction that wrote nothing leaves
+// no folder behind.
+- (void)finishExtractionInStagingDirectory:(NSString *)stagingPath
+                                 succeeded:(BOOL)ok
+                                     error:(nullable NSError *)error
+                           quarantineError:(nullable NSError *)quarantineError {
+    NSFileManager *fm = [NSFileManager defaultManager];
+    NSError *failure = ok ? nil : [self extractionError:error
+                                    addingQuarantineError:quarantineError];
+
+    if (!ok && [fm contentsOfDirectoryAtPath:stagingPath error:nil].count == 0) {
+        rmdir(stagingPath.fileSystemRepresentation);
+        self.working = NO;
+        [self presentError:failure title:[self failureTitle]];
+        return;
+    }
+
+    if (ok && !quarantineError) {
+        [self unwrapSingleItemDirectoryAtPath:stagingPath];
+    }
+
+    NSError *moveError = nil;
+    NSString *destPath = [self moveStagingDirectory:stagingPath
+                            toDestinationForArchive:self.archivePath
+                                              error:&moveError];
+    self.working = NO;
+
+    if (!destPath) {
+        NSMutableDictionary *userInfo = [@{
+            NSLocalizedDescriptionKey:
+                @"The extracted files could not be moved into place next to the archive.",
+            NSLocalizedRecoverySuggestionErrorKey: [NSString stringWithFormat:
+                @"They are in the hidden folder “%@”.", stagingPath],
+        } mutableCopy];
+        if (moveError) {
+            userInfo[NSLocalizedFailureReasonErrorKey] = moveError.localizedDescription;
+            userInfo[NSUnderlyingErrorKey] = moveError;
+        }
+        [self presentError:[NSError errorWithDomain:NSCocoaErrorDomain
+                                               code:NSFileWriteUnknownError
+                                           userInfo:userInfo]
+                     title:[self failureTitle]];
+    } else if (!ok) {
+        [self presentError:failure title:[self failureTitle]];
+    } else if (quarantineError) {
+        [self presentError:quarantineError
+                     title:[NSString stringWithFormat:
+            @"“%@” was extracted, but some files are not marked as downloaded.",
+            self.archivePath.lastPathComponent]];
+    } else {
+        [self extractionFinishedAtPath:destPath];
+    }
+}
+
+// The extraction error, with a quarantine failure for the partial output
+// appended to its recovery suggestion so both appear in the sheet.
+- (NSError *)extractionError:(nullable NSError *)error
+       addingQuarantineError:(nullable NSError *)quarantineError {
+    if (!error) {
+        error = [NSError errorWithDomain:NSCocoaErrorDomain
+                                    code:NSFileReadUnknownError
+                                userInfo:@{NSLocalizedDescriptionKey: @"Extraction failed."}];
+    }
+    if (!quarantineError) return error;
+
+    NSMutableArray<NSString *> *suggestion = [NSMutableArray array];
+    for (NSString *text in @[error.localizedRecoverySuggestion ?: @"",
+                             quarantineError.localizedDescription ?: @"",
+                             quarantineError.localizedRecoverySuggestion ?: @""]) {
+        if (text.length > 0) [suggestion addObject:text];
+    }
+    NSMutableDictionary *userInfo = [error.userInfo mutableCopy];
+    userInfo[NSLocalizedDescriptionKey] = error.localizedDescription;
+    userInfo[NSLocalizedRecoverySuggestionErrorKey] = [suggestion componentsJoinedByString:@"\n\n"];
+    return [NSError errorWithDomain:error.domain code:error.code userInfo:userInfo];
+}
+
 // Removes the output of a cancelled extraction off the main thread, then
 // closes the window. The window stays open until then so that the app, which
 // quits when its last extraction window closes, does not exit before cleanup.
-- (void)removeCancelledOutputAtPath:(NSString *)destPath {
+- (void)removeCancelledOutputAtPath:(NSString *)stagingPath {
     self.statusLabel.stringValue = @"Removing partial output…";
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-        // destPath was created by createDestinationForArchive:, so it held
-        // nothing before this extraction.
-        [[NSFileManager defaultManager] removeItemAtPath:destPath error:nil];
+        // The staging directory was created for this extraction, so it held
+        // nothing before; its contents were already marked as quarantined.
+        [[NSFileManager defaultManager] removeItemAtPath:stagingPath error:nil];
         dispatch_async(dispatch_get_main_queue(), ^{
             self.working = NO;
             [self close];
@@ -173,12 +244,30 @@
             baseName.stringByDeletingPathExtension];
 }
 
-// Creates a new, empty directory for the extraction: the archive's base name,
-// or "<name> 2", "<name> 3", ... if that path is taken by any file or
-// directory. mkdir fails with EEXIST instead of reusing an existing directory,
-// so anything already on disk is never written into or removed on cancel.
-- (nullable NSString *)createDestinationForArchive:(NSString *)archivePath
-                                             error:(NSError **)error {
+// Creates a hidden directory next to the archive to extract into. The output
+// gets its visible name only after it has been marked with the archive's
+// quarantine value.
+- (nullable NSString *)createStagingDirectoryForArchive:(NSString *)archivePath
+                                                 error:(NSError **)error {
+    NSString *path = [archivePath.stringByDeletingLastPathComponent
+        stringByAppendingPathComponent:
+            [@".n2o-extract-" stringByAppendingString:NSUUID.UUID.UUIDString]];
+    if (mkdir(path.fileSystemRepresentation, 0755) == 0) return path;
+
+    if (error) {
+        *error = [NSError errorWithDomain:NSPOSIXErrorDomain
+                                     code:errno
+                                 userInfo:@{NSFilePathErrorKey: path}];
+    }
+    return nil;
+}
+
+// Renames the staging directory to the archive's base name, or "<name> 2",
+// "<name> 3", ... if that name is taken by any file or directory. RENAME_EXCL
+// makes the rename fail with EEXIST instead of replacing an existing item.
+- (nullable NSString *)moveStagingDirectory:(NSString *)stagingPath
+                    toDestinationForArchive:(NSString *)archivePath
+                                      error:(NSError **)error {
     NSString *base = [self destinationPathForArchive:archivePath];
 
     for (NSUInteger n = 1; ; n++) {
@@ -186,7 +275,8 @@
             ? base
             : [NSString stringWithFormat:@"%@ %lu", base, (unsigned long)n];
 
-        if (mkdir(candidate.fileSystemRepresentation, 0755) == 0) {
+        if (renamex_np(stagingPath.fileSystemRepresentation,
+                       candidate.fileSystemRepresentation, RENAME_EXCL) == 0) {
             return candidate;
         }
         if (errno != EEXIST) {
@@ -205,10 +295,6 @@
 - (void)extractionFinishedAtPath:(NSString *)destPath {
     self.progressBar.doubleValue = 100.0;
     self.statusLabel.stringValue = @"Done.";
-
-    // Unwrap single-item directories: if the destination contains exactly one
-    // top-level item and it's a directory, move its contents up.
-    [self unwrapSingleItemDirectoryAtPath:destPath];
 
     // Reveal in Finder.
     [[NSWorkspace sharedWorkspace] selectFile:nil

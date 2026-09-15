@@ -12,9 +12,10 @@ extern NSString *const NAQuarantineErrorDomain;
 /// Sets the quarantine value of sourcePath on rootPath and on every item below
 /// it. Symlinks receive the attribute themselves and are not followed. An item
 /// without owner write permission is given it while the attribute is set, then
-/// its mode is restored. Returns YES when sourcePath has no quarantine value or
-/// every item received it; otherwise NO with an error naming how many items
-/// were not marked.
+/// its mode is restored. A directory that cannot be listed is given owner rwx;
+/// if it still cannot be listed it counts as an item that was not marked.
+/// Returns YES when sourcePath has no quarantine value or every item received
+/// it; otherwise NO with an error naming how many items were not marked.
 + (BOOL)copyQuarantineFromPath:(NSString *)sourcePath
                   toTreeAtPath:(NSString *)rootPath
                          error:(NSError **)error;

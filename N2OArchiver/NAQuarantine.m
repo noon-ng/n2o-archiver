@@ -15,14 +15,7 @@ static const char *const kQuarantineAttribute = "com.apple.quarantine";
     if (!value) return YES;
 
     NSMutableArray<NSString *> *failed = [NSMutableArray array];
-    [self setQuarantine:value onPath:rootPath failed:failed];
-
-    // enumeratorAtPath: does not descend into symlinked directories.
-    for (NSString *relativePath in [[NSFileManager defaultManager] enumeratorAtPath:rootPath]) {
-        [self setQuarantine:value
-                     onPath:[rootPath stringByAppendingPathComponent:relativePath]
-                     failed:failed];
-    }
+    [self markTreeAtPath:rootPath value:value failed:failed];
 
     if (failed.count == 0) return YES;
 
@@ -59,6 +52,37 @@ static const char *const kQuarantineAttribute = "com.apple.quarantine";
     if (size <= 0) return nil;
     value.length = (NSUInteger)size;
     return value;
+}
+
+// Marks path and, for a directory, everything below it. Symlinks are marked
+// themselves and not followed. A directory that cannot be listed is given
+// owner read, write and search permission (the access NALibarchiveExtractor
+// already gives its output) and is reported as a failure if it still cannot be
+// listed, instead of being skipped.
++ (void)markTreeAtPath:(NSString *)path
+                 value:(NSData *)value
+                failed:(NSMutableArray<NSString *> *)failed {
+    [self setQuarantine:value onPath:path failed:failed];
+
+    struct stat st;
+    if (lstat(path.fileSystemRepresentation, &st) != 0 || !S_ISDIR(st.st_mode)) return;
+
+    NSFileManager *fm = [NSFileManager defaultManager];
+    NSArray<NSString *> *children = [fm contentsOfDirectoryAtPath:path error:nil];
+    if (!children && (st.st_mode & 0700) != 0700 &&
+        chmod(path.fileSystemRepresentation, (st.st_mode & 07777) | 0700) == 0) {
+        children = [fm contentsOfDirectoryAtPath:path error:nil];
+    }
+    if (!children) {
+        if (![failed containsObject:path]) [failed addObject:path];
+        return;
+    }
+
+    for (NSString *child in children) {
+        [self markTreeAtPath:[path stringByAppendingPathComponent:child]
+                       value:value
+                      failed:failed];
+    }
 }
 
 + (void)setQuarantine:(NSData *)value
