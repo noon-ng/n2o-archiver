@@ -31,6 +31,7 @@ SOURCES = N2OArchiver/main.m \
           N2OArchiver/NAQuarantine.m \
           N2OArchiver/Plugins/NALibarchiveExtractor.m \
           N2OArchiver/Plugins/NA7zzTool.m \
+          N2OArchiver/Plugins/NA7zzExtractor.m \
           N2OArchiver/Plugins/NA7zExtractor.m \
           N2OArchiver/Plugins/NARarExtractor.m
 

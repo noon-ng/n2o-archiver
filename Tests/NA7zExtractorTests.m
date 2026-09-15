@@ -1,5 +1,6 @@
 #import "NATestCase.h"
 #import "NATestFixtures.h"
+#import "NAPluginManager.h"
 #import "Plugins/NA7zExtractor.h"
 #import "Plugins/NA7zzTool.h"
 
@@ -221,6 +222,35 @@
                          error.localizedDescription);
     NAAssertTrue(error.localizedFailureReason.length > 0,
                  @"7zz stderr should be kept as the failure reason");
+}
+
+#pragma mark - Format type
+
+// A file routed to this extractor by extension must be in its format; 7zz
+// would otherwise detect and extract any format it supports, such as a disk
+// image.
+- (void)testOtherFormatWithThisExtensionIsNotExtracted {
+    NSString *renamed = [NATestFixtures pathForFixture:@"disk-image.7z"];
+    [[NSFileManager defaultManager] copyItemAtPath:[NATestFixtures pathForFixture:@"disk-image.dmg"]
+                                            toPath:renamed error:nil];
+
+    NAPluginManager *pm = [[NAPluginManager alloc] init];
+    [pm registerBuiltinExtractors];
+    id<NAExtractorPlugin> routed = [pm extractorForFileAtPath:renamed];
+
+    NSError *error = nil;
+    BOOL ok = [routed extractArchiveAtPath:renamed
+                             toDestination:self.destDir
+                                  progress:nil
+                                     error:&error];
+    [[NSFileManager defaultManager] removeItemAtPath:renamed error:nil];
+
+    NAAssertTrue([routed isKindOfClass:[NA7zExtractor class]],
+                 @"a .7z file no extractor claims by content is routed by extension");
+    NAAssertFalse(ok, @"a disk image named .7z should not be extracted");
+    NAAssertEqual([[NSFileManager defaultManager]
+                      contentsOfDirectoryAtPath:self.destDir error:nil].count, 0u,
+                  @"nothing should be written");
 }
 
 #pragma mark - Cancellation

@@ -94,6 +94,7 @@ static NSString *const NA7zzErrorDomain = @"sh.n2o.archiver.7zz";
 }
 
 + (BOOL)extractArchiveAtPath:(NSString *)archivePath
+                  formatType:(NSString *)formatType
                toDestination:(NSString *)destPath
                     progress:(nullable NAExtractionProgressBlock)progressBlock
                  isCancelled:(nullable BOOL (^)(void))isCancelled
@@ -115,6 +116,7 @@ static NSString *const NA7zzErrorDomain = @"sh.n2o.archiver.7zz";
         // "-p" with no value supplies an empty password, so an encrypted
         // archive fails instead of prompting.
         @"x", @"-y", @"-bsp1", @"-p",
+        [@"-t" stringByAppendingString:formatType],
         [NSString stringWithFormat:@"-o%@", destPath],
         @"--", archivePath
     ];
@@ -152,10 +154,13 @@ static NSString *const NA7zzErrorDomain = @"sh.n2o.archiver.7zz";
 }
 
 + (nullable NSArray<NSString *> *)contentsOfArchiveAtPath:(NSString *)path
+                                               formatType:(NSString *)formatType
                                                     error:(NSError **)error {
     NSMutableData *output = [NSMutableData data];
     NSData *stderrData = nil;
-    int status = [self runWithArguments:@[@"l", @"-slt", @"-p", @"--", path]
+    int status = [self runWithArguments:@[@"l", @"-slt", @"-p",
+                                          [@"-t" stringByAppendingString:formatType],
+                                          @"--", path]
                           stdoutHandler:^(NSData *data) { [output appendData:data]; }
                             isCancelled:nil
                               cancelled:NULL

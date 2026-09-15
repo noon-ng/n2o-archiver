@@ -18,15 +18,19 @@ NS_ASSUME_NONNULL_BEGIN
 
 + (nullable NSString *)toolPath;
 
-/// isCancelled is polled while 7zz runs; when it returns YES the task is
-/// terminated and the call returns NO with NSUserCancelledError.
+/// formatType is passed to 7zz as -t<formatType> (for example @"7z", @"rar",
+/// @"rar5"), so the archive is opened only as that format. isCancelled is
+/// polled while 7zz runs; when it returns YES the task is terminated and the
+/// call returns NO with NSUserCancelledError.
 + (BOOL)extractArchiveAtPath:(NSString *)archivePath
+                  formatType:(NSString *)formatType
                toDestination:(NSString *)destPath
                     progress:(nullable NAExtractionProgressBlock)progressBlock
                  isCancelled:(nullable BOOL (^)(void))isCancelled
                        error:(NSError **)error;
 
 + (nullable NSArray<NSString *> *)contentsOfArchiveAtPath:(NSString *)path
+                                               formatType:(NSString *)formatType
                                                     error:(NSError **)error;
 
 @end

@@ -1,5 +1,5 @@
 #import <Foundation/Foundation.h>
-#import "NAExtractorPlugin.h"
+#import "NA7zzExtractor.h"
 
-@interface NARarExtractor : NSObject <NAExtractorPlugin>
+@interface NARarExtractor : NA7zzExtractor
 @end

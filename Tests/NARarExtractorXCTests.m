@@ -1,5 +1,6 @@
 #import <XCTest/XCTest.h>
 #import "NATestFixtures.h"
+#import "NAPluginManager.h"
 #import "Plugins/NARarExtractor.h"
 
 @interface NARarExtractorXCTests : XCTestCase
@@ -117,6 +118,35 @@
     XCTAssertEqualObjects([NSSet setWithArray:entries], expected,
                          @"entries should be the archive members only, got %@ (%@)",
                          entries, error);
+}
+
+#pragma mark - Format type
+
+// A file routed to this extractor by extension must be in its format; 7zz
+// would otherwise detect and extract any format it supports, such as a disk
+// image.
+- (void)testOtherFormatWithThisExtensionIsNotExtracted {
+    NSString *renamed = [NATestFixtures pathForFixture:@"disk-image.rar"];
+    [[NSFileManager defaultManager] copyItemAtPath:[NATestFixtures pathForFixture:@"disk-image.dmg"]
+                                            toPath:renamed error:nil];
+
+    NAPluginManager *pm = [[NAPluginManager alloc] init];
+    [pm registerBuiltinExtractors];
+    id<NAExtractorPlugin> routed = [pm extractorForFileAtPath:renamed];
+
+    NSError *error = nil;
+    BOOL ok = [routed extractArchiveAtPath:renamed
+                             toDestination:self.destDir
+                                  progress:nil
+                                     error:&error];
+    [[NSFileManager defaultManager] removeItemAtPath:renamed error:nil];
+
+    XCTAssertTrue([routed isKindOfClass:[NARarExtractor class]],
+                 @"a .rar file no extractor claims by content is routed by extension");
+    XCTAssertFalse(ok, @"a disk image named .rar should not be extracted");
+    XCTAssertEqual([[NSFileManager defaultManager]
+                      contentsOfDirectoryAtPath:self.destDir error:nil].count, 0u,
+                  @"nothing should be written");
 }
 
 #pragma mark - Cancellation
