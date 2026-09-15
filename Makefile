@@ -22,7 +22,10 @@ STATIC_LIBS = $(LIBARCHIVE_PREFIX)/lib/libarchive.a \
               $(LZ4_PREFIX)/lib/liblz4.a \
               $(LIBB2_PREFIX)/lib/libb2.a
 
+# -MMD -MP write a .d file per object listing the headers it includes (and,
+# for Tests/main.m, the test files it #imports), so edits to those rebuild it.
 CFLAGS = -fobjc-arc \
+         -MMD -MP \
          $(ARCH) \
          $(MIN_OS) \
          -Wall -Wextra -Wno-unused-parameter \
@@ -68,6 +71,9 @@ ICONSET_DIR   = build/icon.iconset
 ICON_ICNS     = $(BUNDLE)/Contents/Resources/AppIcon.icns
 
 ICON_SIZES = 16 32 128 256 512
+
+INSTALL_DIR ?= /Applications
+SUDO        ?= sudo
 
 HELPER_7ZZ   = $(BUNDLE)/Contents/Helpers/7zz
 ENTITLEMENTS = N2OArchiver/N2OArchiver.entitlements
@@ -122,13 +128,23 @@ $(TEST_BIN): $(TEST_OBJECTS)
 	@mkdir -p $(dir $@)
 	$(CC) $(LDFLAGS) -o $@ $(TEST_OBJECTS)
 
+# Copies the bundle next to the installed one and then replaces it, so no files
+# from an earlier build remain. With sudo the installed copy is owned by root
+# and not writable by the user account, which keeps the bundled 7zz and the
+# app's code from being modified without administrator rights.
 install: $(BUNDLE)
-	sudo cp -Rf $(BUNDLE) /Applications/
-	@echo "Installed $(APP_NAME) to /Applications/"
+	$(SUDO) rm -rf "$(INSTALL_DIR)/.$(APP_NAME).app.new"
+	$(SUDO) ditto $(BUNDLE) "$(INSTALL_DIR)/.$(APP_NAME).app.new"
+	$(SUDO) rm -rf "$(INSTALL_DIR)/$(APP_NAME).app"
+	$(SUDO) mv "$(INSTALL_DIR)/.$(APP_NAME).app.new" "$(INSTALL_DIR)/$(APP_NAME).app"
+	codesign --verify --strict "$(INSTALL_DIR)/$(APP_NAME).app"
+	@echo "Installed $(APP_NAME) to $(INSTALL_DIR)"
 
 uninstall:
-	sudo rm -rf /Applications/$(APP_NAME).app
-	@echo "Removed $(APP_NAME) from /Applications/"
+	$(SUDO) rm -rf "$(INSTALL_DIR)/$(APP_NAME).app"
+	@echo "Removed $(APP_NAME) from $(INSTALL_DIR)"
 
 clean:
 	rm -rf build
+
+-include $(OBJECTS:.o=.d) $(TEST_OBJECTS:.o=.d)
