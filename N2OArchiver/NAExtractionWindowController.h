@@ -16,6 +16,12 @@ NS_ASSUME_NONNULL_BEGIN
 /// directly when no extraction is running.
 - (void)cancelExtraction:(nullable id)sender;
 
+/// YES when available bytes are below the smaller of 1 GB and 5% of total.
+/// While extracting, free space on the destination volume is checked every
+/// 0.25 s; when it is low the extraction is stopped, its output removed and
+/// the reason shown.
++ (BOOL)isFreeSpaceLowWithAvailable:(uint64_t)available total:(uint64_t)total;
+
 @end
 
 NS_ASSUME_NONNULL_END

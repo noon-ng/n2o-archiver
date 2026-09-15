@@ -2,6 +2,7 @@
 #import "NAPluginManager.h"
 #import "NAQuarantine.h"
 #include <stdio.h>
+#include <sys/mount.h>
 #include <sys/stat.h>
 
 @interface NAExtractionWindowController () <NSWindowDelegate>
@@ -19,6 +20,12 @@
 @property (nonatomic, strong, nullable) id<NSObject> activity;
 // The error shown in the sheet, as composed by presentError:title:.
 @property (nonatomic, strong, nullable) NSError *presentedError;
+// Checks free space on the volume holding a path; replaceable in tests.
+@property (nonatomic, copy) BOOL (^spaceIsLow)(NSString *path);
+// Polls spaceIsLow while working.
+@property (nonatomic, strong, nullable) dispatch_source_t spaceMonitor;
+// Set when the extraction was stopped for low free space; shown after cleanup.
+@property (nonatomic, strong, nullable) NSError *stopError;
 @end
 
 @implementation NAExtractionWindowController
@@ -29,6 +36,13 @@
     if (self) {
         _archivePath = [archivePath copy];
         _cancelled = NO;
+        _spaceIsLow = ^BOOL(NSString *path) {
+            struct statfs fs;
+            if (statfs(path.fileSystemRepresentation, &fs) != 0) return NO;
+            return [NAExtractionWindowController
+                isFreeSpaceLowWithAvailable:(uint64_t)fs.f_bavail * fs.f_bsize
+                                      total:(uint64_t)fs.f_blocks * fs.f_bsize];
+        };
         window.delegate = self;
         [self setupUI];
         self.filenameLabel.stringValue = archivePath.lastPathComponent;
@@ -74,6 +88,7 @@
     self.statusLabel.stringValue = @"Extracting…";
     self.extractor = extractor;
     self.working = YES;
+    [self startSpaceMonitorForPath:stagingPath];
 
     __weak typeof(self) weakSelf = self;
     NSString *archivePath = self.archivePath;
@@ -206,13 +221,53 @@
         [[NSFileManager defaultManager] removeItemAtPath:stagingPath error:nil];
         dispatch_async(dispatch_get_main_queue(), ^{
             self.working = NO;
-            [self close];
+            if (self.stopError) {
+                [self presentError:self.stopError title:[self failureTitle]];
+            } else {
+                [self close];
+            }
         });
     });
 }
 
++ (BOOL)isFreeSpaceLowWithAvailable:(uint64_t)available total:(uint64_t)total {
+    const uint64_t oneGigabyte = 1000ull * 1000 * 1000;
+    return available < MIN(oneGigabyte, total / 20);
+}
+
+// Stops the extraction when free space on the destination volume runs low, so
+// an archive that expands far beyond its size (for example a zip bomb) cannot
+// fill the volume. The output is removed through the cancel path.
+- (void)startSpaceMonitorForPath:(NSString *)path {
+    dispatch_source_t timer =
+        dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
+    dispatch_source_set_timer(timer, dispatch_time(DISPATCH_TIME_NOW, 0),
+                              (uint64_t)(0.25 * NSEC_PER_SEC), (uint64_t)(0.05 * NSEC_PER_SEC));
+    __weak typeof(self) weakSelf = self;
+    dispatch_source_set_event_handler(timer, ^{
+        __strong typeof(weakSelf) s = weakSelf;
+        if (!s || s.cancelled || !s.spaceIsLow(path)) return;
+
+        s.stopError = [NSError errorWithDomain:NSCocoaErrorDomain
+                                          code:NSFileWriteOutOfSpaceError
+                                      userInfo:@{
+            NSLocalizedDescriptionKey: @"Extraction was stopped.",
+            NSLocalizedRecoverySuggestionErrorKey:
+                @"The disk is almost full: free space dropped below 1 GB, or below 5% of "
+                @"the volume if that is smaller. The partially extracted files were removed.",
+        }];
+        [s cancelExtraction:nil];
+    });
+    self.spaceMonitor = timer;
+    dispatch_resume(timer);
+}
+
 - (void)setWorking:(BOOL)working {
     _working = working;
+    if (!working && self.spaceMonitor) {
+        dispatch_source_cancel(self.spaceMonitor);
+        self.spaceMonitor = nil;
+    }
     NSProcessInfo *processInfo = [NSProcessInfo processInfo];
     if (working && !self.activity) {
         self.activity = [processInfo beginActivityWithOptions:NSActivityUserInitiated

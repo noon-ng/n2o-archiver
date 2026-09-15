@@ -189,6 +189,49 @@ static dispatch_semaphore_t NAScriptedRelease;
         [NSPredicate predicateWithFormat:@"SELF BEGINSWITH '.n2o-extract-'"]];
 }
 
+#pragma mark - Free space
+
+- (void)testFreeSpaceThresholdIsSmallerOfOneGigabyteAndFivePercent {
+    const uint64_t GB = 1000ull * 1000 * 1000;
+    NAAssertFalse([NAExtractionWindowController isFreeSpaceLowWithAvailable:2 * GB total:500 * GB],
+                  @"2 GB free on a 500 GB volume is enough");
+    NAAssertTrue([NAExtractionWindowController isFreeSpaceLowWithAvailable:GB / 10 * 9 total:500 * GB],
+                 @"under 1 GB free on a large volume is low");
+    NAAssertFalse([NAExtractionWindowController isFreeSpaceLowWithAvailable:GB / 10 * 6 total:10 * GB],
+                  @"600 MB free on a 10 GB volume is above 5%%");
+    NAAssertTrue([NAExtractionWindowController isFreeSpaceLowWithAvailable:GB / 10 * 4 total:10 * GB],
+                 @"400 MB free on a 10 GB volume is below 5%%");
+}
+
+- (void)testExtractionStopsWhenFreeSpaceRunsLow {
+    NSString *dir = [self makeUnwrapDestination];
+    [self writeFile:@"wait-space.n2oscripted" under:dir];
+    NSString *archive = [dir stringByAppendingPathComponent:@"wait-space.n2oscripted"];
+    NAScriptedRelease = dispatch_semaphore_create(0);
+
+    NAExtractionWindowController *wc =
+        [[NAExtractionWindowController alloc] initWithArchivePath:archive];
+    __block BOOL low = NO;
+    [wc setValue:^BOOL(NSString *path) { return low; } forKey:@"spaceIsLow"];
+    [wc beginExtraction];
+
+    NAAssertTrue(NAWaitUntil(^BOOL { return [self stagingDirectoriesIn:dir].count == 1; }, 10.0),
+                 @"extraction should start");
+    low = YES;
+    NAAssertTrue(NAWaitUntil(^BOOL { return [[wc valueForKey:@"cancelled"] boolValue]; }, 10.0),
+                 @"low free space should stop the extraction");
+    dispatch_semaphore_signal(NAScriptedRelease);
+
+    NAAssertTrue(NAWaitUntil(^BOOL { return !wc.isWorking && wc.window.attachedSheet != nil; }, 10.0),
+                 @"the reason should be presented after the output is removed");
+    NSError *shown = [wc valueForKey:@"presentedError"];
+    NAAssertTrue([shown.localizedRecoverySuggestion containsString:@"almost full"],
+                 @"the sheet should say the disk is almost full, got %@", shown.localizedRecoverySuggestion);
+    NAAssertFalse([self fileExists:@"wait-space" under:dir], @"no output folder should remain");
+    NAAssertEqual([self stagingDirectoriesIn:dir].count, 0u, @"the staging directory should be removed");
+    [wc.window endSheet:wc.window.attachedSheet returnCode:NSAlertFirstButtonReturn];
+}
+
 #pragma mark - Destination directory
 
 - (void)testDestinationUsesArchiveBaseName {
