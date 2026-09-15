@@ -121,6 +121,27 @@
                    @"/nonexistent/file.zip"]);
 }
 
+#pragma mark - Cancellation
+
+- (void)testCancelStopsExtractionAfterCurrentEntry {
+    NSString *path = [NATestFixtures pathForFixture:@"multi.zip"];
+    NALibarchiveExtractor *extractor = self.extractor;
+    NSError *error = nil;
+    BOOL ok = [extractor extractArchiveAtPath:path
+                                toDestination:self.destDir
+                                     progress:^(double fraction, NSString *entry) {
+        [extractor cancelExtraction];
+    }
+                                        error:&error];
+    NAAssertFalse(ok, @"cancelled extraction should return NO");
+    NAAssertTrue([error.domain isEqualToString:NSCocoaErrorDomain] &&
+                 error.code == NSUserCancelledError,
+                 @"error should be NSUserCancelledError, got %@", error);
+    NAAssertEqual([[NSFileManager defaultManager]
+                      contentsOfDirectoryAtPath:self.destDir error:nil].count, 1u,
+                  @"only the entry before the cancel should be extracted");
+}
+
 #pragma mark - Error handling
 
 - (void)testExtractCorruptArchiveFails {

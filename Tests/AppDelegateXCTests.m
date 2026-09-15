@@ -78,4 +78,46 @@
         [[NATestFixtures fixtureDir] stringByAppendingPathComponent:@"multi"] error:nil];
 }
 
+#pragma mark - Quit
+
+- (void)testQuitWhenIdleTerminatesNow {
+    AppDelegate *delegate = [[AppDelegate alloc] init];
+    [delegate applicationWillFinishLaunching:
+        [NSNotification notificationWithName:NSApplicationWillFinishLaunchingNotification
+                                      object:NSApp]];
+    XCTAssertEqual([delegate applicationShouldTerminate:NSApp], NSTerminateNow,
+                  @"quit with no extraction running should terminate immediately");
+}
+
+- (void)testQuitDuringExtractionCancelsAndWaits {
+    AppDelegate *delegate = [[AppDelegate alloc] init];
+    [delegate applicationWillFinishLaunching:
+        [NSNotification notificationWithName:NSApplicationWillFinishLaunchingNotification
+                                      object:NSApp]];
+
+    NSFileManager *fm = [NSFileManager defaultManager];
+    NSString *dir = [NSTemporaryDirectory() stringByAppendingPathComponent:
+        [NSString stringWithFormat:@"n2o-quit-%u", arc4random()]];
+    [fm createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:nil error:nil];
+    NSString *archive = [dir stringByAppendingPathComponent:@"test.zip"];
+    [fm copyItemAtPath:[NATestFixtures pathForFixture:@"test.zip"] toPath:archive error:nil];
+
+    [delegate application:NSApp openFile:archive];
+    NSApplicationTerminateReply reply = [delegate applicationShouldTerminate:NSApp];
+    XCTAssertEqual(reply, NSTerminateLater,
+                  @"quit during extraction should wait for cleanup");
+
+    NSDate *timeout = [NSDate dateWithTimeIntervalSinceNow:3.0];
+    while ([[NSDate date] compare:timeout] == NSOrderedAscending) {
+        [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
+                                 beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.1]];
+    }
+
+    BOOL outputExists = [fm fileExistsAtPath:[dir stringByAppendingPathComponent:@"test"]];
+    [fm removeItemAtPath:dir error:nil];
+    XCTAssertEqual([[delegate valueForKey:@"windowControllers"] count], 0u,
+                  @"cancelled extraction windows should close");
+    XCTAssertFalse(outputExists, @"quit during extraction should remove partial output");
+}
+
 @end

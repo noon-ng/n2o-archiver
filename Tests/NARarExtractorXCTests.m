@@ -91,6 +91,24 @@
     XCTAssertTrue([exts containsObject:@"rar"]);
 }
 
+#pragma mark - Cancellation
+
+- (void)testCancelBeforeExtractionReturnsCancelled {
+    [self.extractor cancelExtraction];
+    NSError *error = nil;
+    BOOL ok = [self.extractor extractArchiveAtPath:[NATestFixtures pathForFixture:@"test.rar"]
+                                     toDestination:self.destDir
+                                          progress:nil
+                                             error:&error];
+    XCTAssertFalse(ok, @"cancelled extraction should return NO");
+    XCTAssertTrue([error.domain isEqualToString:NSCocoaErrorDomain] &&
+                 error.code == NSUserCancelledError,
+                 @"error should be NSUserCancelledError, got %@", error);
+    XCTAssertEqual([[NSFileManager defaultManager]
+                      contentsOfDirectoryAtPath:self.destDir error:nil].count, 0u,
+                  @"nothing should be extracted");
+}
+
 #pragma mark - Error handling
 
 - (void)testExtractMissingFileFails {

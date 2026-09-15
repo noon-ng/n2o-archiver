@@ -4,6 +4,10 @@
 static const uint8_t kRar4Signature[] = {'R', 'a', 'r', '!', 0x1A, 0x07, 0x00};
 static const uint8_t kRar5Signature[] = {'R', 'a', 'r', '!', 0x1A, 0x07, 0x01, 0x00};
 
+@interface NARarExtractor ()
+@property (atomic, assign) BOOL cancelled;
+@end
+
 @implementation NARarExtractor
 
 + (NSArray<NSString *> *)supportedExtensions {
@@ -35,7 +39,12 @@ static const uint8_t kRar5Signature[] = {'R', 'a', 'r', '!', 0x1A, 0x07, 0x01, 0
     return [NA7zzTool extractArchiveAtPath:archivePath
                              toDestination:destPath
                                   progress:progressBlock
+                               isCancelled:^BOOL { return self.cancelled; }
                                      error:error];
+}
+
+- (void)cancelExtraction {
+    self.cancelled = YES;
 }
 
 - (NSArray<NSString *> *)contentsOfArchiveAtPath:(NSString *)path

@@ -4,6 +4,10 @@
 
 static NSString *const NALibarchiveErrorDomain = @"sh.n2o.archiver.libarchive";
 
+@interface NALibarchiveExtractor ()
+@property (atomic, assign) BOOL cancelled;
+@end
+
 @implementation NALibarchiveExtractor
 
 #pragma mark - NAExtractorPlugin (class methods)
@@ -109,6 +113,12 @@ static NSString *const NALibarchiveErrorDomain = @"sh.n2o.archiver.libarchive";
     BOOL success = YES;
 
     while (archive_read_next_header(a, &entry) == ARCHIVE_OK) {
+        if (self.cancelled) {
+            [self setCancelledError:error];
+            success = NO;
+            break;
+        }
+
         // Rewrite the entry pathname, and the hardlink target if any, to be
         // under the destination. Hardlink targets are otherwise resolved
         // against the process working directory.
@@ -125,7 +135,11 @@ static NSString *const NALibarchiveErrorDomain = @"sh.n2o.archiver.libarchive";
         } else if (archive_entry_size(entry) > 0) {
             r = [self copyDataFromArchive:a toWriter:ext];
             if (r != ARCHIVE_OK) {
-                [self setError:error fromArchive:a code:2];
+                if (self.cancelled) {
+                    [self setCancelledError:error];
+                } else {
+                    [self setError:error fromArchive:a code:2];
+                }
                 success = NO;
                 break;
             }
@@ -142,9 +156,20 @@ static NSString *const NALibarchiveErrorDomain = @"sh.n2o.archiver.libarchive";
         }
     }
 
+    // The cancel may arrive after the last entry; report it so the caller
+    // treats the output as cancelled.
+    if (success && self.cancelled) {
+        [self setCancelledError:error];
+        success = NO;
+    }
+
     archive_read_free(a);
     archive_write_free(ext);
     return success;
+}
+
+- (void)cancelExtraction {
+    self.cancelled = YES;
 }
 
 #pragma mark - NAExtractorPlugin (optional: list contents)
@@ -217,6 +242,8 @@ static NSString *const NALibarchiveErrorDomain = @"sh.n2o.archiver.libarchive";
     int64_t total = 0;
     struct archive_entry *entry;
     while (archive_read_next_header(a, &entry) == ARCHIVE_OK) {
+        // This pass decompresses the whole archive; stop early on cancel.
+        if (self.cancelled) break;
         total += archive_entry_size(entry);
         archive_read_data_skip(a);
     }
@@ -232,6 +259,8 @@ static NSString *const NALibarchiveErrorDomain = @"sh.n2o.archiver.libarchive";
     la_int64_t offset;
 
     for (;;) {
+        if (self.cancelled) return ARCHIVE_FAILED;
+
         int r = archive_read_data_block(ar, &buff, &size, &offset);
         if (r == ARCHIVE_EOF) return ARCHIVE_OK;
         if (r != ARCHIVE_OK) return r;
@@ -242,6 +271,13 @@ static NSString *const NALibarchiveErrorDomain = @"sh.n2o.archiver.libarchive";
             return r;
         }
     }
+}
+
+- (void)setCancelledError:(NSError **)error {
+    if (!error) return;
+    *error = [NSError errorWithDomain:NSCocoaErrorDomain
+                                 code:NSUserCancelledError
+                             userInfo:nil];
 }
 
 - (void)setError:(NSError **)error

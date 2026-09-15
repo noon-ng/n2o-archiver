@@ -28,7 +28,13 @@ static NSString *const NA7zzErrorDomain = @"sh.n2o.archiver.7zz";
 + (BOOL)extractArchiveAtPath:(NSString *)archivePath
                toDestination:(NSString *)destPath
                     progress:(nullable NAExtractionProgressBlock)progressBlock
+                 isCancelled:(nullable BOOL (^)(void))isCancelled
                        error:(NSError **)error {
+    if (isCancelled && isCancelled()) {
+        [self setCancelledError:error];
+        return NO;
+    }
+
     NSString *tool = [self toolPath];
     if (!tool) {
         if (error) {
@@ -83,8 +89,25 @@ static NSString *const NA7zzErrorDomain = @"sh.n2o.archiver.7zz";
         };
     }
 
+    // Poll for cancellation while 7zz runs.
+    BOOL cancelled = NO;
+    while (task.isRunning) {
+        if (isCancelled && isCancelled()) {
+            cancelled = YES;
+            [task terminate];
+            break;
+        }
+        [NSThread sleepForTimeInterval:0.05];
+    }
     [task waitUntilExit];
     outHandle.readabilityHandler = nil;
+
+    // The cancel may arrive after 7zz has exited; report it so the caller
+    // treats the output as cancelled.
+    if (cancelled || (isCancelled && isCancelled())) {
+        [self setCancelledError:error];
+        return NO;
+    }
 
     if (task.terminationStatus != 0) {
         NSData *errData = [errPipe.fileHandleForReading readDataToEndOfFile];
@@ -150,6 +173,13 @@ static NSString *const NA7zzErrorDomain = @"sh.n2o.archiver.7zz";
 }
 
 #pragma mark - Private
+
++ (void)setCancelledError:(NSError **)error {
+    if (!error) return;
+    *error = [NSError errorWithDomain:NSCocoaErrorDomain
+                                 code:NSUserCancelledError
+                             userInfo:nil];
+}
 
 + (int64_t)totalUncompressedSize:(NSString *)archivePath {
     NSString *tool = [self toolPath];

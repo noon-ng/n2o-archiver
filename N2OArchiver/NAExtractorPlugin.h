@@ -24,6 +24,12 @@ typedef void (^NAExtractionProgressBlock)(double fractionComplete,
 - (nullable NSArray<NSString *> *)contentsOfArchiveAtPath:(NSString *)path
                                                     error:(NSError **)error;
 
+/// Asks a running extractArchiveAtPath:toDestination:progress:error: call to
+/// stop. May be called from any thread, including before extraction starts.
+/// The extraction call then returns NO with NSUserCancelledError in
+/// NSCocoaErrorDomain. Files already written are left for the caller to remove.
+- (void)cancelExtraction;
+
 @end
 
 NS_ASSUME_NONNULL_END

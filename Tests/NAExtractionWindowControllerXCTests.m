@@ -12,7 +12,7 @@
 - (NSString *)createDestinationForArchive:(NSString *)archivePath
                                     error:(NSError **)error;
 - (void)unwrapSingleItemDirectoryAtPath:(NSString *)destPath;
-- (void)cancelExtraction:(id)sender;
+- (BOOL)windowShouldClose:(NSWindow *)sender;
 @end
 
 @interface NAExtractionWindowControllerXCTests ()
@@ -154,6 +154,56 @@
     [[NSFileManager defaultManager] copyItemAtPath:[NATestFixtures pathForFixture:fixture]
                                             toPath:path error:nil];
     return path;
+}
+
+#pragma mark - Cancellation
+
+- (void)testCancelKeepsWindowOpenUntilExtractionReturns {
+    NSString *dir = [self makeUnwrapDestination];
+    NSString *archive = [self copyFixture:@"test.zip" to:@"test.zip" under:dir];
+    NAExtractionWindowController *wc =
+        [[NAExtractionWindowController alloc] initWithArchivePath:archive];
+
+    [wc beginExtraction];
+    [wc cancelExtraction:nil];
+
+    // The completion block is queued on the main queue, so it has not run yet.
+    XCTAssertTrue(wc.window.isVisible,
+                 @"window should stay open until the extraction has returned");
+    XCTAssertTrue(wc.isWorking, @"controller should report work in progress");
+
+    [self spinRunLoopFor:2.0];
+
+    XCTAssertFalse(wc.isWorking, @"work should be finished after cleanup");
+    XCTAssertFalse(wc.window.isVisible, @"window should close after cleanup");
+    XCTAssertFalse([self fileExists:@"test" under:dir],
+                  @"output of the cancelled extraction should be removed");
+}
+
+- (void)testClosingWindowDuringExtractionCancels {
+    NSString *dir = [self makeUnwrapDestination];
+    NSString *archive = [self copyFixture:@"test.zip" to:@"test.zip" under:dir];
+    NAExtractionWindowController *wc =
+        [[NAExtractionWindowController alloc] initWithArchivePath:archive];
+
+    [wc beginExtraction];
+    BOOL shouldClose = [wc windowShouldClose:wc.window];
+
+    XCTAssertFalse(shouldClose, @"window should not close while extracting");
+
+    [self spinRunLoopFor:2.0];
+
+    XCTAssertFalse(wc.window.isVisible, @"window should close after cleanup");
+    XCTAssertFalse([self fileExists:@"test" under:dir],
+                  @"closing during extraction should remove the output");
+}
+
+- (void)spinRunLoopFor:(NSTimeInterval)seconds {
+    NSDate *timeout = [NSDate dateWithTimeIntervalSinceNow:seconds];
+    while ([[NSDate date] compare:timeout] == NSOrderedAscending) {
+        [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
+                                 beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.1]];
+    }
 }
 
 #pragma mark - Unwrapping a single top-level directory

@@ -6,6 +6,7 @@
 @interface AppDelegate ()
 @property (nonatomic, strong) NSMutableArray<NAExtractionWindowController *> *windowControllers;
 @property (nonatomic, assign) NSUInteger openPanelCount;
+@property (nonatomic, assign) BOOL terminationPending;
 @end
 
 @implementation AppDelegate
@@ -74,6 +75,19 @@
     }];
 }
 
+// Quitting during an extraction cancels it and waits until the partial output
+// has been removed; terminateIfIdle then replies to the pending termination.
+- (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication *)sender {
+    NSArray<NAExtractionWindowController *> *working = [self workingControllers];
+    if (working.count == 0) return NSTerminateNow;
+
+    self.terminationPending = YES;
+    for (NAExtractionWindowController *wc in working) {
+        [wc cancelExtraction:nil];
+    }
+    return NSTerminateLater;
+}
+
 // Closing the open panel counts as closing the last window, and AppKit can
 // terminate the app before the panel's completion handler runs and opens an
 // extraction window. Termination is handled by terminateIfIdle instead.
@@ -108,13 +122,30 @@
     [wc beginExtraction];
 }
 
-// Quits once no extraction windows remain and no open panel is showing. Only
-// the application's installed delegate terminates, so delegates created in
-// tests do not end the test process.
+// Quits once no extraction windows remain and no open panel is showing, or,
+// while a quit is pending, once no extraction is still working. Only the
+// application's installed delegate terminates, so delegates created in tests
+// do not end the test process.
 - (void)terminateIfIdle {
     if (NSApp.delegate != self) return;
+
+    if (self.terminationPending) {
+        if ([self workingControllers].count > 0) return;
+        self.terminationPending = NO;
+        [NSApp replyToApplicationShouldTerminate:YES];
+        return;
+    }
+
     if (self.windowControllers.count > 0 || self.openPanelCount > 0) return;
     [NSApp terminate:nil];
+}
+
+- (NSArray<NAExtractionWindowController *> *)workingControllers {
+    return [self.windowControllers filteredArrayUsingPredicate:
+        [NSPredicate predicateWithBlock:^BOOL(NAExtractionWindowController *wc,
+                                              NSDictionary *bindings) {
+            return wc.isWorking;
+        }]];
 }
 
 @end

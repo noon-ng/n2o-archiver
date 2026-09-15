@@ -2,13 +2,16 @@
 #import "NAPluginManager.h"
 #include <sys/stat.h>
 
-@interface NAExtractionWindowController ()
+@interface NAExtractionWindowController () <NSWindowDelegate>
 @property (nonatomic, copy) NSString *archivePath;
 @property (nonatomic, strong) NSProgressIndicator *progressBar;
 @property (nonatomic, strong) NSTextField *filenameLabel;
 @property (nonatomic, strong) NSTextField *statusLabel;
 @property (nonatomic, strong) NSButton *cancelButton;
-@property (nonatomic, assign) BOOL cancelled;
+// Read on the extraction thread, written on the main thread.
+@property (atomic, assign) BOOL cancelled;
+@property (nonatomic, assign, readwrite, getter=isWorking) BOOL working;
+@property (nonatomic, strong, nullable) id<NAExtractorPlugin> extractor;
 @end
 
 @implementation NAExtractionWindowController
@@ -19,6 +22,7 @@
     if (self) {
         _archivePath = [archivePath copy];
         _cancelled = NO;
+        window.delegate = self;
         [self setupUI];
         self.filenameLabel.stringValue = archivePath.lastPathComponent;
     }
@@ -36,7 +40,6 @@
         return;
     }
 
-    NSFileManager *fm = [NSFileManager defaultManager];
     NSError *dirError = nil;
     NSString *destPath = [self createDestinationForArchive:self.archivePath
                                                      error:&dirError];
@@ -49,12 +52,15 @@
 
     self.progressBar.doubleValue = 0.0;
     self.statusLabel.stringValue = @"Extracting…";
+    self.extractor = extractor;
+    self.working = YES;
 
     __weak typeof(self) weakSelf = self;
+    NSString *archivePath = self.archivePath;
 
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         NSError *error = nil;
-        BOOL ok = [extractor extractArchiveAtPath:self.archivePath
+        BOOL ok = [extractor extractArchiveAtPath:archivePath
                                     toDestination:destPath
                                          progress:^(double fraction, NSString *entry) {
             dispatch_async(dispatch_get_main_queue(), ^{
@@ -69,16 +75,33 @@
         dispatch_async(dispatch_get_main_queue(), ^{
             __strong typeof(weakSelf) s = weakSelf;
             if (!s) return;
+            s.extractor = nil;
 
             if (s.cancelled) {
-                // Clean up partial extraction. destPath was created by
-                // createDestinationForArchive:, so it held nothing beforehand.
-                [fm removeItemAtPath:destPath error:nil];
+                [s removeCancelledOutputAtPath:destPath];
             } else if (ok) {
+                s.working = NO;
                 [s extractionFinishedAtPath:destPath];
             } else {
+                s.working = NO;
                 [s showErrorMessage:error.localizedDescription ?: @"Extraction failed."];
             }
+        });
+    });
+}
+
+// Removes the output of a cancelled extraction off the main thread, then
+// closes the window. The window stays open until then so that the app, which
+// quits when its last extraction window closes, does not exit before cleanup.
+- (void)removeCancelledOutputAtPath:(NSString *)destPath {
+    self.statusLabel.stringValue = @"Removing partial output…";
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        // destPath was created by createDestinationForArchive:, so it held
+        // nothing before this extraction.
+        [[NSFileManager defaultManager] removeItemAtPath:destPath error:nil];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            self.working = NO;
+            [self close];
         });
     });
 }
@@ -218,8 +241,28 @@
 #pragma mark - Actions
 
 - (void)cancelExtraction:(id)sender {
+    if (!self.working) {
+        [self close];
+        return;
+    }
+    if (self.cancelled) return;
+
     self.cancelled = YES;
-    [self close];
+    if ([self.extractor respondsToSelector:@selector(cancelExtraction)]) {
+        [self.extractor cancelExtraction];
+    }
+    self.statusLabel.stringValue = @"Cancelling…";
+    self.cancelButton.enabled = NO;
+}
+
+#pragma mark - NSWindowDelegate
+
+// The close button cancels a running extraction; the window closes once the
+// cancelled output has been removed.
+- (BOOL)windowShouldClose:(NSWindow *)sender {
+    if (!self.working) return YES;
+    [self cancelExtraction:sender];
+    return NO;
 }
 
 #pragma mark - Window and UI setup

@@ -3,6 +3,10 @@
 
 static const uint8_t k7zSignature[] = {'7', 'z', 0xBC, 0xAF, 0x27, 0x1C};
 
+@interface NA7zExtractor ()
+@property (atomic, assign) BOOL cancelled;
+@end
+
 @implementation NA7zExtractor
 
 + (NSArray<NSString *> *)supportedExtensions {
@@ -31,7 +35,12 @@ static const uint8_t k7zSignature[] = {'7', 'z', 0xBC, 0xAF, 0x27, 0x1C};
     return [NA7zzTool extractArchiveAtPath:archivePath
                              toDestination:destPath
                                   progress:progressBlock
+                               isCancelled:^BOOL { return self.cancelled; }
                                      error:error];
+}
+
+- (void)cancelExtraction {
+    self.cancelled = YES;
 }
 
 - (NSArray<NSString *> *)contentsOfArchiveAtPath:(NSString *)path
