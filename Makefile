@@ -44,6 +44,7 @@ SOURCES = N2OArchiver/main.m \
           N2OArchiver/AppDelegate.m \
           N2OArchiver/NAPluginManager.m \
           N2OArchiver/NAExtractionWindowController.m \
+          N2OArchiver/NAExtractionJob.m \
           N2OArchiver/NAQuarantine.m \
           N2OArchiver/Plugins/NALibarchiveExtractor.m \
           N2OArchiver/Plugins/NA7zzTool.m \
@@ -57,6 +58,7 @@ OBJECTS = $(patsubst %.m,build/obj/%.o,$(SOURCES))
 TEST_SOURCES = Tests/main.m \
                Tests/NATestCase.m \
                Tests/NATestFixtures.m \
+               Tests/NATestScriptedExtractor.m \
                Tests/NAWait.m
 
 APP_SOURCES_NO_MAIN = $(filter-out N2OArchiver/main.m,$(SOURCES))

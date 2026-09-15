@@ -5,6 +5,7 @@
 // Import test classes so they link in.
 #import "NALibarchiveExtractorTests.m"
 #import "NAPluginManagerTests.m"
+#import "NAExtractionJobTests.m"
 #import "NAExtractionWindowControllerTests.m"
 #import "AppDelegateTests.m"
 #import "NA7zExtractorTests.m"
@@ -20,6 +21,7 @@ int main(int argc, const char *argv[]) {
 
         [NATestRunner registerTestClass:[NALibarchiveExtractorTests class]];
         [NATestRunner registerTestClass:[NAPluginManagerTests class]];
+        [NATestRunner registerTestClass:[NAExtractionJobTests class]];
         [NATestRunner registerTestClass:[NAExtractionWindowControllerTests class]];
         [NATestRunner registerTestClass:[AppDelegateTests class]];
         [NATestRunner registerTestClass:[NA7zExtractorTests class]];
