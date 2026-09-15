@@ -43,6 +43,12 @@
     }
 }
 
+- (void)testBundledHelperIsTheFirstCandidate {
+    NSString *first = [NA7zzTool candidatePaths].firstObject;
+    NAAssertTrue([first hasSuffix:@"Contents/Helpers/7zz"],
+                 @"the 7zz copied into the app bundle should be preferred, got %@", first);
+}
+
 - (void)testMinimumVersionIs2501 {
     NAAssertFalse([NA7zzTool isSupportedVersion:@"24.09"], @"24.09 predates the CVE-2025-11001 fix");
     NAAssertFalse([NA7zzTool isSupportedVersion:@"25.00"], @"25.00 predates the CVE-2025-55188 fix");

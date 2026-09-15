@@ -6,8 +6,21 @@ CC           = clang
 ARCH         = -arch arm64
 MIN_OS       = -mmacosx-version-min=13.0
 
-# Homebrew libarchive paths
+# Homebrew paths. libarchive and its Homebrew dependencies are linked
+# statically and 7zz is copied into the bundle, so the app does not load or
+# run code from the Homebrew prefix, which the user account can write to.
 LIBARCHIVE_PREFIX = $(shell brew --prefix libarchive 2>/dev/null || echo /opt/homebrew/opt/libarchive)
+XZ_PREFIX         = $(shell brew --prefix xz 2>/dev/null || echo /opt/homebrew/opt/xz)
+ZSTD_PREFIX       = $(shell brew --prefix zstd 2>/dev/null || echo /opt/homebrew/opt/zstd)
+LZ4_PREFIX        = $(shell brew --prefix lz4 2>/dev/null || echo /opt/homebrew/opt/lz4)
+LIBB2_PREFIX      = $(shell brew --prefix libb2 2>/dev/null || echo /opt/homebrew/opt/libb2)
+SEVENZIP_PREFIX   = $(shell brew --prefix sevenzip 2>/dev/null || echo /opt/homebrew/opt/sevenzip)
+
+STATIC_LIBS = $(LIBARCHIVE_PREFIX)/lib/libarchive.a \
+              $(XZ_PREFIX)/lib/liblzma.a \
+              $(ZSTD_PREFIX)/lib/libzstd.a \
+              $(LZ4_PREFIX)/lib/liblz4.a \
+              $(LIBB2_PREFIX)/lib/libb2.a
 
 CFLAGS = -fobjc-arc \
          $(ARCH) \
@@ -18,8 +31,8 @@ CFLAGS = -fobjc-arc \
          -ITests
 
 LDFLAGS = $(ARCH) $(MIN_OS) \
-          -L$(LIBARCHIVE_PREFIX)/lib \
-          -larchive \
+          $(STATIC_LIBS) \
+          -lexpat -lbz2 -lz -liconv \
           -framework Cocoa \
           -framework Security \
           -framework UniformTypeIdentifiers
@@ -56,7 +69,10 @@ ICON_ICNS     = $(BUNDLE)/Contents/Resources/AppIcon.icns
 
 ICON_SIZES = 16 32 128 256 512
 
-.PHONY: all clean run test icons install uninstall
+HELPER_7ZZ   = $(BUNDLE)/Contents/Helpers/7zz
+ENTITLEMENTS = N2OArchiver/N2OArchiver.entitlements
+
+.PHONY: all clean run test icons install uninstall verify-bundle
 
 all: $(BUNDLE)
 
@@ -75,10 +91,18 @@ $(ICON_ICNS): $(ICONSET_DIR)
 	@mkdir -p $(dir $@)
 	iconutil -c icns $< -o $@
 
-$(BUNDLE): $(EXECUTABLE) N2OArchiver/Info.plist icons
+$(BUNDLE): $(EXECUTABLE) N2OArchiver/Info.plist $(ENTITLEMENTS) icons
 	@cp N2OArchiver/Info.plist $(BUNDLE)/Contents/Info.plist
-	@mkdir -p $(BUNDLE)/Contents/PlugIns
+	@mkdir -p $(BUNDLE)/Contents/PlugIns $(BUNDLE)/Contents/Helpers
+	@cp -f "$$(realpath $(SEVENZIP_PREFIX)/bin/7zz)" $(HELPER_7ZZ)
+	@chmod 755 $(HELPER_7ZZ)
+	@# Ad-hoc signatures with hardened runtime: the helper, then the app.
+	codesign --force --options runtime --sign - $(HELPER_7ZZ)
+	codesign --force --options runtime --entitlements $(ENTITLEMENTS) --sign - $(BUNDLE)
 	@echo "Built $(BUNDLE)"
+
+verify-bundle: $(BUNDLE)
+	Tests/verify-bundle.sh $(BUNDLE)
 
 $(EXECUTABLE): $(OBJECTS)
 	@mkdir -p $(dir $@)

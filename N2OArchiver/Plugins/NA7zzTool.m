@@ -75,7 +75,13 @@ static NSString *const NA7zzErrorDomain = @"sh.n2o.archiver.7zz";
 static NSString *const NA7zzMinimumVersion = @"25.01";
 
 + (NSArray<NSString *> *)candidatePaths {
-    return @[@"/opt/homebrew/bin/7zz", @"/usr/local/bin/7zz"];
+    // The copy in the app bundle comes first: it is covered by the app's
+    // signature and, installed in /Applications, not writable by the user
+    // account. The Homebrew locations apply outside the bundle, for example
+    // in the test runner.
+    NSString *bundled = [NSBundle.mainBundle.bundlePath
+        stringByAppendingPathComponent:@"Contents/Helpers/7zz"];
+    return @[bundled, @"/opt/homebrew/bin/7zz", @"/usr/local/bin/7zz"];
 }
 
 + (void)resolveToolPath:(NSString **)path error:(NSError **)error {

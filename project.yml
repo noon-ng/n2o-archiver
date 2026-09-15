@@ -27,10 +27,23 @@ targets:
           - "/opt/homebrew/opt/libarchive/include"
         LIBRARY_SEARCH_PATHS:
           - "/opt/homebrew/opt/libarchive/lib"
+        # Static libarchive and dependencies, as in the Makefile.
         OTHER_LDFLAGS:
-          - "-larchive"
+          - "/opt/homebrew/opt/libarchive/lib/libarchive.a"
+          - "/opt/homebrew/opt/xz/lib/liblzma.a"
+          - "/opt/homebrew/opt/zstd/lib/libzstd.a"
+          - "/opt/homebrew/opt/lz4/lib/liblz4.a"
+          - "/opt/homebrew/opt/libb2/lib/libb2.a"
+          - "-lexpat"
+          - "-lbz2"
+          - "-lz"
+          - "-liconv"
         CLANG_ENABLE_MODULES: YES
         GENERATE_INFOPLIST_FILE: NO
+        ENABLE_HARDENED_RUNTIME: YES
+        CODE_SIGN_ENTITLEMENTS: N2OArchiver/N2OArchiver.entitlements
+        # The Makefile also copies 7zz into Contents/Helpers; Xcode builds
+        # use the Homebrew 7zz.
     dependencies: []
     scheme:
       testTargets:
@@ -67,8 +80,17 @@ targets:
           - "/opt/homebrew/opt/libarchive/include"
         LIBRARY_SEARCH_PATHS:
           - "/opt/homebrew/opt/libarchive/lib"
+        # Static libarchive and dependencies, as in the Makefile.
         OTHER_LDFLAGS:
-          - "-larchive"
+          - "/opt/homebrew/opt/libarchive/lib/libarchive.a"
+          - "/opt/homebrew/opt/xz/lib/liblzma.a"
+          - "/opt/homebrew/opt/zstd/lib/libzstd.a"
+          - "/opt/homebrew/opt/lz4/lib/liblz4.a"
+          - "/opt/homebrew/opt/libb2/lib/libb2.a"
+          - "-lexpat"
+          - "-lbz2"
+          - "-lz"
+          - "-liconv"
         CLANG_ENABLE_MODULES: YES
         GENERATE_INFOPLIST_FILE: YES
     dependencies:

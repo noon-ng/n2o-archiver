@@ -23,7 +23,8 @@ NS_ASSUME_NONNULL_BEGIN
 /// Why toolPath is nil, or nil if a supported 7zz was found.
 + (nullable NSError *)toolError;
 
-/// Locations checked for 7zz, in order. Only binaries named 7zz are accepted;
+/// Locations checked for 7zz, in order: Contents/Helpers/7zz in the app
+/// bundle, then the Homebrew locations. Only binaries named 7zz are accepted;
 /// a program named 7z may be p7zip, a separate and older code base.
 + (NSArray<NSString *> *)candidatePaths;
 
