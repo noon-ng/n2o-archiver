@@ -98,6 +98,53 @@
     XCTAssertTrue([exts containsObject:@"7z"]);
 }
 
+#pragma mark - Progress
+
+- (void)testProgressReachesCompletion {
+    __block NSUInteger calls = 0;
+    __block double lastFraction = -1;
+    NSError *error = nil;
+    BOOL ok = [self.extractor extractArchiveAtPath:[NATestFixtures pathForFixture:@"test.7z"]
+                                     toDestination:self.destDir
+                                          progress:^(double fraction, NSString *entry) {
+        calls++;
+        lastFraction = fraction;
+    }
+                                             error:&error];
+    XCTAssertTrue(ok, @"extraction should succeed: %@", error.localizedDescription);
+    XCTAssertTrue(calls > 0, @"progress should be reported");
+    XCTAssertTrue(lastFraction == 1.0, @"last progress should be 1.0, got %f", lastFraction);
+}
+
+- (void)testProgressParserHandlesSplitStatusStrings {
+    NSMutableArray<NSNumber *> *fractions = [NSMutableArray array];
+    NSMutableArray<NSString *> *entries = [NSMutableArray array];
+    NA7zzProgressParser *parser =
+        [[NA7zzProgressParser alloc] initWithHandler:^(double fraction, NSString *entry) {
+        [fractions addObject:@(fraction)];
+        [entries addObject:entry];
+    }];
+
+    // Shape of `7zz x -bsp1` output: header lines, then status strings
+    // separated by backspaces, with a run of spaces that erases the previous one.
+    const char raw[] =
+        "Path = big.7z\nSolid = -\n\n  0%\b\b\b\b    \b\b\b\b"
+        "  3% 1 - src/big.bin\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b"
+        " 97% 1 - src/big.bin\b\b\b\n\nEverything is Ok\n";
+    NSData *data = [NSData dataWithBytes:raw length:strlen(raw)];
+
+    // Feed 7 bytes at a time so status strings are split across calls.
+    for (NSUInteger i = 0; i < data.length; i += 7) {
+        [parser appendData:[data subdataWithRange:
+            NSMakeRange(i, MIN((NSUInteger)7, data.length - i))]];
+    }
+
+    XCTAssertEqualObjects(fractions, (@[@0.0, @0.03, @0.97]),
+                         @"fractions should be 0, 0.03, 0.97, got %@", fractions);
+    XCTAssertEqualObjects(entries, (@[@"", @"big.bin", @"big.bin"]),
+                         @"entries should carry the file name, got %@", entries);
+}
+
 #pragma mark - Cancellation
 
 - (void)testCancelBeforeExtractionReturnsCancelled {

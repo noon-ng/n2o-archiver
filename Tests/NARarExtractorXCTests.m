@@ -91,6 +91,24 @@
     XCTAssertTrue([exts containsObject:@"rar"]);
 }
 
+#pragma mark - Progress
+
+- (void)testProgressReachesCompletion {
+    __block NSUInteger calls = 0;
+    __block double lastFraction = -1;
+    NSError *error = nil;
+    BOOL ok = [self.extractor extractArchiveAtPath:[NATestFixtures pathForFixture:@"test.rar"]
+                                     toDestination:self.destDir
+                                          progress:^(double fraction, NSString *entry) {
+        calls++;
+        lastFraction = fraction;
+    }
+                                             error:&error];
+    XCTAssertTrue(ok, @"extraction should succeed: %@", error.localizedDescription);
+    XCTAssertTrue(calls > 0, @"progress should be reported");
+    XCTAssertTrue(lastFraction == 1.0, @"last progress should be 1.0, got %f", lastFraction);
+}
+
 #pragma mark - Cancellation
 
 - (void)testCancelBeforeExtractionReturnsCancelled {

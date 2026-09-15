@@ -3,6 +3,17 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+/// Parses the progress output of `7zz x -bsp1`. 7zz writes status strings
+/// such as " 45% 3 - dir/file.txt" and overwrites them with runs of backspaces;
+/// the handler receives the percentage as a fraction and the file name.
+/// appendData: may be called from any thread, with data split at any byte.
+@interface NA7zzProgressParser : NSObject
+
+- (instancetype)initWithHandler:(void (^)(double fraction, NSString *entry))handler;
+- (void)appendData:(NSData *)data;
+
+@end
+
 @interface NA7zzTool : NSObject
 
 + (nullable NSString *)toolPath;

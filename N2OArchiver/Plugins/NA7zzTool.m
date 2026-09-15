@@ -2,6 +2,74 @@
 
 static NSString *const NA7zzErrorDomain = @"sh.n2o.archiver.7zz";
 
+@implementation NA7zzProgressParser {
+    NSMutableData *_buffer;
+    NSString *_lastEntry;
+    void (^_handler)(double, NSString *);
+}
+
+- (instancetype)initWithHandler:(void (^)(double, NSString *))handler {
+    self = [super init];
+    if (self) {
+        _buffer = [NSMutableData data];
+        _lastEntry = @"";
+        _handler = [handler copy];
+    }
+    return self;
+}
+
+- (void)appendData:(NSData *)data {
+    @synchronized (self) {
+        [_buffer appendData:data];
+
+        // Process every segment that ends in a backspace or newline; keep the
+        // unterminated remainder for the next call.
+        const uint8_t *bytes = _buffer.bytes;
+        NSUInteger length = _buffer.length;
+        NSUInteger start = 0;
+        for (NSUInteger i = 0; i < length; i++) {
+            if (bytes[i] == '\b' || bytes[i] == '\n' || bytes[i] == '\r') {
+                if (i > start) {
+                    [self processSegment:[_buffer subdataWithRange:
+                        NSMakeRange(start, i - start)]];
+                }
+                start = i + 1;
+            }
+        }
+        [_buffer replaceBytesInRange:NSMakeRange(0, start) withBytes:NULL length:0];
+    }
+}
+
+- (void)processSegment:(NSData *)segment {
+    NSString *text = [[NSString alloc] initWithData:segment encoding:NSUTF8StringEncoding]
+                  ?: [[NSString alloc] initWithData:segment encoding:NSISOLatin1StringEncoding];
+
+    // "NN%", optionally followed by a file count and "- path".
+    static NSRegularExpression *pattern;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        pattern = [NSRegularExpression
+            regularExpressionWithPattern:@"^\\s*(\\d{1,3})%(?:\\s+\\d+)?(?:\\s+-\\s+(.*\\S))?\\s*$"
+                                 options:0
+                                   error:nil];
+    });
+
+    NSTextCheckingResult *match =
+        [pattern firstMatchInString:text options:0 range:NSMakeRange(0, text.length)];
+    if (!match) return;
+
+    double fraction = [[text substringWithRange:[match rangeAtIndex:1]] doubleValue] / 100.0;
+    if (fraction > 1.0) fraction = 1.0;
+
+    NSRange nameRange = [match rangeAtIndex:2];
+    if (nameRange.location != NSNotFound) {
+        _lastEntry = [text substringWithRange:nameRange].lastPathComponent;
+    }
+    _handler(fraction, _lastEntry);
+}
+
+@end
+
 @implementation NA7zzTool
 
 + (nullable NSString *)toolPath {
@@ -46,11 +114,10 @@ static NSString *const NA7zzErrorDomain = @"sh.n2o.archiver.7zz";
         return NO;
     }
 
-    int64_t totalSize = [self totalUncompressedSize:archivePath];
-
     NSTask *task = [[NSTask alloc] init];
     task.executableURL = [NSURL fileURLWithPath:tool];
-    task.arguments = @[@"x", @"-y",
+    // -bsp1 sends progress to stdout even when stdout is not a terminal.
+    task.arguments = @[@"x", @"-y", @"-bsp1",
                        [NSString stringWithFormat:@"-o%@", destPath],
                        archivePath];
 
@@ -65,29 +132,18 @@ static NSString *const NA7zzErrorDomain = @"sh.n2o.archiver.7zz";
         return NO;
     }
 
+    // stdout is always read, so 7zz cannot block on a full pipe. The handler
+    // runs on a file handle queue, not the calling thread.
+    __block NSString *lastEntry = @"";
+    NA7zzProgressParser *parser =
+        [[NA7zzProgressParser alloc] initWithHandler:^(double fraction, NSString *entry) {
+        lastEntry = entry;
+        if (progressBlock) progressBlock(fraction, entry);
+    }];
     NSFileHandle *outHandle = outPipe.fileHandleForReading;
-    __block int64_t extractedSize = 0;
-
-    if (progressBlock && totalSize > 0) {
-        outHandle.readabilityHandler = ^(NSFileHandle *fh) {
-            NSData *data = [fh availableData];
-            if (data.length == 0) return;
-
-            NSString *chunk = [[NSString alloc] initWithData:data
-                                                    encoding:NSUTF8StringEncoding];
-            if (!chunk) return;
-
-            for (NSString *line in [chunk componentsSeparatedByString:@"\n"]) {
-                NSString *trimmed = [line stringByTrimmingCharactersInSet:
-                    [NSCharacterSet whitespaceAndNewlineCharacterSet]];
-                if ([trimmed hasPrefix:@"- "]) {
-                    NSString *name = [trimmed substringFromIndex:2];
-                    progressBlock((double)extractedSize / (double)totalSize,
-                                  name.lastPathComponent);
-                }
-            }
-        };
-    }
+    outHandle.readabilityHandler = ^(NSFileHandle *fh) {
+        [parser appendData:[fh availableData]];
+    };
 
     // Poll for cancellation while 7zz runs.
     BOOL cancelled = NO;
@@ -101,6 +157,7 @@ static NSString *const NA7zzErrorDomain = @"sh.n2o.archiver.7zz";
     }
     [task waitUntilExit];
     outHandle.readabilityHandler = nil;
+    [parser appendData:[outHandle readDataToEndOfFile]];
 
     // The cancel may arrive after 7zz has exited; report it so the caller
     // treats the output as cancelled.
@@ -122,6 +179,12 @@ static NSString *const NA7zzErrorDomain = @"sh.n2o.archiver.7zz";
         return NO;
     }
 
+    if (progressBlock) {
+        // The parser calls its handler while holding its own lock.
+        NSString *entry;
+        @synchronized (parser) { entry = lastEntry; }
+        progressBlock(1.0, entry);
+    }
     return YES;
 }
 
@@ -179,38 +242,6 @@ static NSString *const NA7zzErrorDomain = @"sh.n2o.archiver.7zz";
     *error = [NSError errorWithDomain:NSCocoaErrorDomain
                                  code:NSUserCancelledError
                              userInfo:nil];
-}
-
-+ (int64_t)totalUncompressedSize:(NSString *)archivePath {
-    NSString *tool = [self toolPath];
-    if (!tool) return -1;
-
-    NSTask *task = [[NSTask alloc] init];
-    task.executableURL = [NSURL fileURLWithPath:tool];
-    task.arguments = @[@"l", @"-slt", archivePath];
-
-    NSPipe *outPipe = [NSPipe pipe];
-    task.standardOutput = outPipe;
-    task.standardError = [NSPipe pipe];
-
-    if (![task launchAndReturnError:nil]) return -1;
-
-    NSData *outData = [outPipe.fileHandleForReading readDataToEndOfFile];
-    [task waitUntilExit];
-
-    NSString *output = [[NSString alloc] initWithData:outData
-                                             encoding:NSUTF8StringEncoding];
-    if (!output) return -1;
-
-    int64_t total = 0;
-    for (NSString *line in [output componentsSeparatedByString:@"\n"]) {
-        if ([line hasPrefix:@"Size = "]) {
-            NSString *sizeStr = [line substringFromIndex:7];
-            long long val = [sizeStr longLongValue];
-            if (val > 0) total += val;
-        }
-    }
-    return total;
 }
 
 @end
