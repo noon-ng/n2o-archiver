@@ -103,10 +103,11 @@ static BOOL NAIsUncompressedRaw(struct archive *a) {
     // SECURE_NOABSOLUTEPATHS cannot be used. SECURE_NODOTDOT rejects entries
     // (and hardlink targets) containing "..", and SECURE_SYMLINKS rejects
     // entries whose path passes through a symlink.
+    //
+    // ARCHIVE_EXTRACT_PERM, _ACL and _FFLAGS are not set: the archive does not
+    // decide file modes beyond sanitizedPermissionsForEntry:, ACLs or flags
+    // such as uchg. Without _PERM, libarchive also applies the umask.
     int flags = ARCHIVE_EXTRACT_TIME
-              | ARCHIVE_EXTRACT_PERM
-              | ARCHIVE_EXTRACT_ACL
-              | ARCHIVE_EXTRACT_FFLAGS
               | ARCHIVE_EXTRACT_SECURE_NODOTDOT
               | ARCHIVE_EXTRACT_SECURE_SYMLINKS;
     archive_write_disk_set_options(ext, flags);
@@ -168,6 +169,8 @@ static BOOL NAIsUncompressedRaw(struct archive *a) {
         const char *entryPath = archive_entry_pathname(entry);
         _currentEntryName = (entryPath ? [NSString stringWithUTF8String:entryPath] : nil)
                             .lastPathComponent ?: @"";
+
+        archive_entry_set_perm(entry, [self sanitizedPermissionsForEntry:entry]);
 
         // Rewrite the entry pathname, and the hardlink target if any, to be
         // under the destination. Hardlink targets are otherwise resolved
@@ -276,6 +279,16 @@ static BOOL NAIsUncompressedRaw(struct archive *a) {
         NSMutableData *full = [self joinPath:directory with:hardlink];
         archive_entry_set_hardlink(entry, full.bytes);
     }
+}
+
+// Drops group and other write and the setuid, setgid and sticky bits, and
+// gives the owner read access to files and full access to directories, so the
+// output cannot be modified by other accounts and can always be listed,
+// quarantined and removed.
+- (mode_t)sanitizedPermissionsForEntry:(struct archive_entry *)entry {
+    mode_t perm = archive_entry_perm(entry) & 0755;
+    perm |= archive_entry_filetype(entry) == AE_IFDIR ? 0700 : 0400;
+    return perm;
 }
 
 - (NSMutableData *)joinPath:(const char *)directory with:(const char *)name {

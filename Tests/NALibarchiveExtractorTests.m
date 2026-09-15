@@ -1,6 +1,10 @@
 #import "NATestCase.h"
 #import "NATestFixtures.h"
 #import "Plugins/NALibarchiveExtractor.h"
+#import <archive.h>
+#import <archive_entry.h>
+#include <sys/acl.h>
+#include <sys/stat.h>
 
 @interface NALibarchiveExtractorTests : NATestCase
 @property (nonatomic, strong) NALibarchiveExtractor *extractor;
@@ -21,7 +25,18 @@
 }
 
 - (void)tearDown {
-    [[NSFileManager defaultManager] removeItemAtPath:self.destDir error:nil];
+    // Clear flags and restore owner access left by archives under test.
+    NSFileManager *fm = [NSFileManager defaultManager];
+    chmod(self.destDir.fileSystemRepresentation, 0755);
+    for (NSString *item in [fm enumeratorAtPath:self.destDir]) {
+        const char *path = [self.destDir stringByAppendingPathComponent:item].fileSystemRepresentation;
+        struct stat st;
+        if (lstat(path, &st) == 0 && !S_ISLNK(st.st_mode)) {
+            chflags(path, 0);
+            chmod(path, (st.st_mode & 0777) | (S_ISDIR(st.st_mode) ? 0700 : 0600));
+        }
+    }
+    [fm removeItemAtPath:self.destDir error:nil];
     [super tearDown];
 }
 
@@ -197,6 +212,102 @@
         NAAssertTrue([ext rangeOfString:@"."].location == NSNotFound,
                      @"%@ can never equal -[NSString pathExtension]", ext);
     }
+}
+
+#pragma mark - Permissions, ACLs and file flags from the archive
+
+- (void)testArchiveModesCannotLoosenOrLockOutput {
+    NSString *out = [self extractFixtureIntoSubdirectory:@"permissions.tar"];
+
+    NAAssertTrue(([self modeAt:out relative:@""] & 022) == 0,
+                 @"a ./ entry should not make the destination group or world writable");
+    mode_t script = [self modeAt:out relative:@"world-writable.sh"];
+    NAAssertTrue((script & 022) == 0, @"group and other write should be dropped");
+    NAAssertTrue((script & 0100) != 0, @"the owner execute bit should be kept");
+    NAAssertTrue(([self modeAt:out relative:@"unlistable"] & 0700) == 0700,
+                 @"a 0311 directory should stay listable by the owner");
+    NAAssertTrue(([self modeAt:out relative:@"readonly"] & 0700) == 0700,
+                 @"a 0555 directory should stay writable by the owner");
+    NAAssertTrue(([self modeAt:out relative:@"readonly/file.txt"] & 0400) != 0,
+                 @"files should stay readable by the owner");
+    NAAssertTrue([[NSFileManager defaultManager] removeItemAtPath:out error:nil],
+                 @"the output should be removable, as cancel cleanup requires");
+}
+
+- (void)testSetuidAndSetgidBitsAreNotRestored {
+    NSString *archive = [self.destDir stringByAppendingPathComponent:@"special-bits.tar"];
+    struct archive *writer = archive_write_new();
+    archive_write_set_format_pax_restricted(writer);
+    archive_write_open_filename(writer, archive.fileSystemRepresentation);
+    NSDictionary<NSString *, NSNumber *> *files = @{@"setuid.bin": @04755, @"setgid.bin": @02755};
+    for (NSString *name in files) {
+        struct archive_entry *entry = archive_entry_new();
+        archive_entry_set_pathname(entry, name.UTF8String);
+        archive_entry_set_filetype(entry, AE_IFREG);
+        archive_entry_set_perm(entry, files[name].unsignedShortValue);
+        // Owned by the current user, so libarchive would otherwise keep the bits.
+        archive_entry_set_uid(entry, getuid());
+        archive_entry_set_gid(entry, getgid());
+        archive_entry_set_size(entry, 1);
+        archive_write_header(writer, entry);
+        archive_write_data(writer, "x", 1);
+        archive_entry_free(entry);
+    }
+    archive_write_close(writer);
+    archive_write_free(writer);
+
+    NSString *out = [self.destDir stringByAppendingPathComponent:@"out"];
+    [[NSFileManager defaultManager] createDirectoryAtPath:out withIntermediateDirectories:YES
+                                               attributes:nil error:nil];
+    NSError *error = nil;
+    BOOL ok = [self.extractor extractArchiveAtPath:archive toDestination:out
+                                          progress:nil error:&error];
+    NAAssertTrue(ok, @"extraction should succeed: %@", error.localizedDescription);
+    NAAssertTrue(([self modeAt:out relative:@"setuid.bin"] & (S_ISUID | S_ISGID)) == 0,
+                 @"setuid should not be restored");
+    NAAssertTrue(([self modeAt:out relative:@"setgid.bin"] & (S_ISUID | S_ISGID)) == 0,
+                 @"setgid should not be restored");
+}
+
+- (void)testFileFlagsAndACLsAreNotRestored {
+    NSString *out = [self extractFixtureIntoSubdirectory:@"flags-acl.tar"];
+
+    struct stat st;
+    lstat([out stringByAppendingPathComponent:@"immutable.txt"].fileSystemRepresentation, &st);
+    NAAssertTrue((st.st_flags & (UF_IMMUTABLE | SF_IMMUTABLE)) == 0,
+                 @"the uchg flag should not be restored");
+
+    NSString *aclFile = [out stringByAppendingPathComponent:@"acl.txt"];
+    // libarchive reports mode 0000 for an entry carrying an NFSv4 ACL.
+    NAAssertTrue(([self modeAt:out relative:@"acl.txt"] & 0400) != 0,
+                 @"a file with an archived ACL should stay readable by the owner");
+    acl_t acl = acl_get_link_np(aclFile.fileSystemRepresentation, ACL_TYPE_EXTENDED);
+    NAAssertTrue(acl == NULL, @"no ACL should be set on extracted files");
+    if (acl) acl_free(acl);
+
+    NAAssertTrue([[NSFileManager defaultManager] fileExistsAtPath:
+                  [out stringByAppendingPathComponent:@"after.txt"]],
+                 @"entries after the flagged ones should be extracted");
+}
+
+- (NSString *)extractFixtureIntoSubdirectory:(NSString *)fixture {
+    NSString *out = [self.destDir stringByAppendingPathComponent:@"out"];
+    [[NSFileManager defaultManager] createDirectoryAtPath:out withIntermediateDirectories:YES
+                                               attributes:nil error:nil];
+    NSError *error = nil;
+    BOOL ok = [self.extractor extractArchiveAtPath:[NATestFixtures pathForFixture:fixture]
+                                     toDestination:out
+                                          progress:nil
+                                             error:&error];
+    NAAssertTrue(ok, @"%@ should extract: %@", fixture, error.localizedDescription);
+    return out;
+}
+
+- (mode_t)modeAt:(NSString *)root relative:(NSString *)relativePath {
+    struct stat st;
+    NSString *path = relativePath.length ? [root stringByAppendingPathComponent:relativePath] : root;
+    if (lstat(path.fileSystemRepresentation, &st) != 0) return 0;
+    return st.st_mode & 07777;
 }
 
 #pragma mark - Cancellation
