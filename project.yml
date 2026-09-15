@@ -53,6 +53,7 @@ targets:
           - "NA7zExtractorTests.m"
           - "NARarExtractorTests.m"
           - "NAQuarantineTests.m"
+          - "PluginFixture"
           - "Fixtures"
       - path: Tests/Fixtures
         type: folder

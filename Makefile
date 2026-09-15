@@ -21,6 +21,7 @@ LDFLAGS = $(ARCH) $(MIN_OS) \
           -L$(LIBARCHIVE_PREFIX)/lib \
           -larchive \
           -framework Cocoa \
+          -framework Security \
           -framework UniformTypeIdentifiers
 
 SOURCES = N2OArchiver/main.m \

@@ -126,4 +126,15 @@
     NAAssertFalse(outputExists, @"quit during extraction should remove partial output");
 }
 
+#pragma mark - Info.plist
+
+// Automatic termination can quit the app while no window is key, including
+// during an extraction; the app quits on its own when idle instead.
+- (void)testInfoPlistDoesNotOptIntoAutomaticTermination {
+    NSDictionary *plist = [NSDictionary dictionaryWithContentsOfFile:@"N2OArchiver/Info.plist"];
+    NAAssertNotNil(plist, @"N2OArchiver/Info.plist should be readable from the repository root");
+    NAAssertNil(plist[@"NSSupportsAutomaticTermination"],
+                @"NSSupportsAutomaticTermination should not be set");
+}
+
 @end

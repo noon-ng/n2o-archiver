@@ -120,4 +120,14 @@
     XCTAssertFalse(outputExists, @"quit during extraction should remove partial output");
 }
 
+#pragma mark - Info.plist
+
+// Automatic termination can quit the app while no window is key, including
+// during an extraction; the app quits on its own when idle instead.
+- (void)testInfoPlistDoesNotOptIntoAutomaticTermination {
+    NSBundle *app = [NSBundle bundleForClass:[AppDelegate class]];
+    XCTAssertNotNil([app objectForInfoDictionaryKey:@"CFBundleIdentifier"]);
+    XCTAssertNil([app objectForInfoDictionaryKey:@"NSSupportsAutomaticTermination"]);
+}
+
 @end

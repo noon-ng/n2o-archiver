@@ -241,6 +241,23 @@
                          copied);
 }
 
+#pragma mark - Process activity
+
+- (void)testWorkingControllerHoldsProcessActivity {
+    NSString *dir = [self makeUnwrapDestination];
+    NSString *archive = [self copyFixture:@"test.zip" to:@"test.zip" under:dir];
+    NAExtractionWindowController *wc =
+        [[NAExtractionWindowController alloc] initWithArchivePath:archive];
+
+    [wc beginExtraction];
+    XCTAssertNotNil([wc valueForKey:@"activity"],
+                   @"extraction should hold an NSProcessInfo activity");
+
+    [self spinRunLoopFor:3.0];
+    XCTAssertNil([wc valueForKey:@"activity"],
+                @"the activity should end when the work is finished");
+}
+
 #pragma mark - Unwrapping a single top-level directory
 
 - (void)testUnwrapMovesDirectoryContentsUp {

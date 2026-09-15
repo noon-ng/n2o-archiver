@@ -13,6 +13,9 @@
 @property (atomic, assign) BOOL cancelled;
 @property (nonatomic, assign, readwrite, getter=isWorking) BOOL working;
 @property (nonatomic, strong, nullable) id<NAExtractorPlugin> extractor;
+// Held while working: keeps the app from being suspended by App Nap or quit
+// by sudden or automatic termination during an extraction.
+@property (nonatomic, strong, nullable) id<NSObject> activity;
 @end
 
 @implementation NAExtractionWindowController
@@ -117,6 +120,18 @@
             [self close];
         });
     });
+}
+
+- (void)setWorking:(BOOL)working {
+    _working = working;
+    NSProcessInfo *processInfo = [NSProcessInfo processInfo];
+    if (working && !self.activity) {
+        self.activity = [processInfo beginActivityWithOptions:NSActivityUserInitiated
+                                                       reason:@"Extracting an archive"];
+    } else if (!working && self.activity) {
+        [processInfo endActivity:self.activity];
+        self.activity = nil;
+    }
 }
 
 #pragma mark - Destination path logic

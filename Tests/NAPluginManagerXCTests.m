@@ -99,6 +99,36 @@
                  @".zip should route to NALibarchiveExtractor, got %@", [ext class]);
 }
 
+#pragma mark - Plugin signatures
+
+- (void)testAdHocSignedPluginIsNotLoaded {
+    NAPluginManager *pm = [[NAPluginManager alloc] init];
+    NSString *dir = [NATestFixtures fixtureDir];
+    [pm loadPluginsFromDirectories:@[dir]];
+
+    NSBundle *bundle = [NSBundle bundleWithPath:
+        [dir stringByAppendingPathComponent:@"AdHocSignedPlugin.bundle"]];
+    XCTAssertFalse(bundle.isLoaded, @"an ad-hoc signed plugin should not be loaded");
+    XCTAssertEqual([pm allPluginClasses].count, 0u,
+                  @"an ad-hoc signed plugin should not be registered");
+}
+
+- (void)testAdHocSignedPluginIsNotTrusted {
+    NSError *error = nil;
+    BOOL trusted = [NAPluginManager isTrustedPluginAtPath:
+        [[NATestFixtures fixtureDir] stringByAppendingPathComponent:@"AdHocSignedPlugin.bundle"]
+                                                    error:&error];
+    XCTAssertFalse(trusted, @"an ad-hoc signature is not issued by Apple");
+    XCTAssertNotNil(error, @"the rejection should carry an error");
+}
+
+- (void)testAppleSignedBundleIsTrusted {
+    NSError *error = nil;
+    BOOL trusted = [NAPluginManager isTrustedPluginAtPath:@"/System/Applications/Calculator.app"
+                                                    error:&error];
+    XCTAssertTrue(trusted, @"an Apple-signed bundle should pass: %@", error);
+}
+
 #pragma mark - No match
 
 - (void)testNoExtractorForUnknownFormat {

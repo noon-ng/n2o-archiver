@@ -2,6 +2,7 @@
 #import "Plugins/NA7zExtractor.h"
 #import "Plugins/NALibarchiveExtractor.h"
 #import "Plugins/NARarExtractor.h"
+#import <Security/Security.h>
 
 @interface NAPluginManager ()
 @property (nonatomic, strong) NSMutableArray<Class<NAExtractorPlugin>> *pluginClasses;
@@ -39,9 +40,11 @@
 }
 
 - (void)loadPlugins {
-    NSArray<NSString *> *searchPaths = [self pluginSearchPaths];
+    [self loadPluginsFromDirectories:[self pluginSearchPaths]];
+}
 
-    for (NSString *dir in searchPaths) {
+- (void)loadPluginsFromDirectories:(NSArray<NSString *> *)directories {
+    for (NSString *dir in directories) {
         NSArray<NSString *> *contents =
             [[NSFileManager defaultManager] contentsOfDirectoryAtPath:dir
                                                                error:nil];
@@ -49,6 +52,17 @@
             if (![item.pathExtension isEqualToString:@"bundle"]) continue;
 
             NSString *fullPath = [dir stringByAppendingPathComponent:item];
+
+            // Any process running as the user can write to the Application
+            // Support folder, so a bundle is loaded only if Apple issued the
+            // certificate that signed it.
+            NSError *trustError = nil;
+            if (![NAPluginManager isTrustedPluginAtPath:fullPath error:&trustError]) {
+                NSLog(@"N2OArchiver: not loading plugin without a valid Apple-issued "
+                      @"signature: %@ (%@)", fullPath, trustError.localizedDescription);
+                continue;
+            }
+
             NSBundle *pluginBundle = [NSBundle bundleWithPath:fullPath];
             if (!pluginBundle) continue;
 
@@ -70,6 +84,37 @@
                   item, NSStringFromClass(principalClass));
         }
     }
+}
+
++ (BOOL)isTrustedPluginAtPath:(NSString *)path error:(NSError **)error {
+    SecStaticCodeRef code = NULL;
+    SecRequirementRef requirement = NULL;
+    CFErrorRef cfError = NULL;
+
+    OSStatus status = SecStaticCodeCreateWithPath(
+        (__bridge CFURLRef)[NSURL fileURLWithPath:path], kSecCSDefaultFlags, &code);
+    if (status == errSecSuccess) {
+        // Developer ID and App Store certificates chain to Apple's root CA.
+        status = SecRequirementCreateWithString(CFSTR("anchor apple generic"),
+                                                kSecCSDefaultFlags, &requirement);
+    }
+    if (status == errSecSuccess) {
+        status = SecStaticCodeCheckValidityWithErrors(
+            code,
+            kSecCSCheckAllArchitectures | kSecCSCheckNestedCode | kSecCSStrictValidate,
+            requirement, &cfError);
+    }
+
+    if (code) CFRelease(code);
+    if (requirement) CFRelease(requirement);
+
+    if (status == errSecSuccess) return YES;
+
+    NSError *reason = cfError
+        ? (NSError *)CFBridgingRelease(cfError)
+        : [NSError errorWithDomain:NSOSStatusErrorDomain code:status userInfo:nil];
+    if (error) *error = reason;
+    return NO;
 }
 
 - (nullable id<NAExtractorPlugin>)extractorForFileAtPath:(NSString *)path {

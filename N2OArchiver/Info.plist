@@ -23,8 +23,6 @@
     <string>13.0</string>
     <key>NSHighResolutionCapable</key>
     <true/>
-    <key>NSSupportsAutomaticTermination</key>
-    <true/>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
 
