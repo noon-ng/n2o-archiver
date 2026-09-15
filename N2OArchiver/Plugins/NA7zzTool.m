@@ -138,7 +138,7 @@ static NSString *const NA7zzErrorDomain = @"sh.n2o.archiver.7zz";
 
     if (status != 0) {
         if (error) *error = [self errorForStatus:status stderrData:stderrData
-                                        fallback:@"7zz extraction failed"];
+                                        fallback:@"7zz could not extract the archive."];
         return NO;
     }
 
@@ -164,7 +164,7 @@ static NSString *const NA7zzErrorDomain = @"sh.n2o.archiver.7zz";
     if (status < 0) return nil;
     if (status != 0) {
         if (error) *error = [self errorForStatus:status stderrData:stderrData
-                                        fallback:@"7zz listing failed"];
+                                        fallback:@"7zz could not list the archive."];
         return nil;
     }
 
@@ -191,9 +191,9 @@ static NSString *const NA7zzErrorDomain = @"sh.n2o.archiver.7zz";
 #pragma mark - Private
 
 // Runs 7zz with stdin on /dev/null, so a prompt reads end-of-file instead of
-// waiting; callers also pass "-p" so no prompt is shown. stdout is passed to stdoutHandler as it
-// arrives and stderr is collected, both while the process runs, so neither
-// pipe can fill. Polls isCancelled every 50 ms and terminates 7zz when it
+// waiting; callers also pass "-p" so no prompt is shown. stdout is passed to
+// stdoutHandler as it arrives and stderr is collected, both while the process
+// runs, so neither pipe can fill. Polls isCancelled every 50 ms and terminates 7zz when it
 // returns YES. Returns the exit status, or -1 if 7zz could not be started.
 + (int)runWithArguments:(NSArray<NSString *> *)arguments
           stdoutHandler:(void (^)(NSData *data))stdoutHandler
@@ -278,16 +278,17 @@ static NSString *const NA7zzErrorDomain = @"sh.n2o.archiver.7zz";
     NSString *text = [[[NSString alloc] initWithData:stderrData encoding:NSUTF8StringEncoding]
         stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 
-    // With an empty "-p", 7zz reports encrypted content as a wrong password.
-    NSString *description;
-    if ([text rangeOfString:@"Wrong password"].location != NSNotFound) {
-        description = @"The archive is password-protected. "
-                      @"N2O Archiver cannot extract password-protected archives yet.";
+    // The description is a short summary; 7zz's own output is the failure
+    // reason. With an empty "-p", 7zz reports encrypted content as a wrong
+    // password.
+    NSMutableDictionary *userInfo = [NSMutableDictionary dictionary];
+    if ([text containsString:@"Wrong password"]) {
+        userInfo[NSLocalizedDescriptionKey] = @"The archive is password-protected.";
+        userInfo[NSLocalizedRecoverySuggestionErrorKey] =
+            @"N2O Archiver cannot extract password-protected archives yet.";
     } else {
-        description = text.length > 0 ? text : fallback;
+        userInfo[NSLocalizedDescriptionKey] = fallback;
     }
-
-    NSMutableDictionary *userInfo = [@{NSLocalizedDescriptionKey: description} mutableCopy];
     if (text.length > 0) userInfo[NSLocalizedFailureReasonErrorKey] = text;
     return [NSError errorWithDomain:NA7zzErrorDomain code:status userInfo:userInfo];
 }

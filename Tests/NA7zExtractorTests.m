@@ -192,9 +192,11 @@
 
     NAAssertFalse(timedOut, @"extraction should not wait for a password");
     NAAssertFalse(ok, @"encrypted archive should fail");
-    NAAssertTrue([error.localizedDescription rangeOfString:@"password-protected"].location != NSNotFound,
+    NAAssertTrue([error.localizedDescription containsString:@"password-protected"],
                  @"error should say the archive is password-protected, got %@",
                  error.localizedDescription);
+    NAAssertTrue(error.localizedRecoverySuggestion.length > 0,
+                 @"the password error should say what the user can do");
 }
 
 - (void)testListEncryptedArchiveFailsWithPasswordError {
@@ -202,9 +204,23 @@
     NSArray *entries = [self.extractor contentsOfArchiveAtPath:
         [NATestFixtures pathForFixture:@"encrypted.7z"] error:&error];
     NAAssertNil(entries, @"listing an encrypted archive should fail");
-    NAAssertTrue([error.localizedDescription rangeOfString:@"password-protected"].location != NSNotFound,
+    NAAssertTrue([error.localizedDescription containsString:@"password-protected"],
                  @"error should say the archive is password-protected, got %@",
                  error.localizedDescription);
+}
+
+- (void)testToolFailureKeepsStandardErrorAsFailureReason {
+    NSError *error = nil;
+    BOOL ok = [self.extractor extractArchiveAtPath:@"/nonexistent/file.7z"
+                                     toDestination:self.destDir
+                                          progress:nil
+                                             error:&error];
+    NAAssertFalse(ok, @"a missing archive should fail");
+    NAAssertEqualObjects(error.localizedDescription, @"7zz could not extract the archive.",
+                         @"the description should be a short summary, got %@",
+                         error.localizedDescription);
+    NAAssertTrue(error.localizedFailureReason.length > 0,
+                 @"7zz stderr should be kept as the failure reason");
 }
 
 #pragma mark - Cancellation

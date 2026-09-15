@@ -120,6 +120,9 @@ static const char *const kValue = "0083;00000000;N2OArchiverTests;";
     XCTAssertFalse(ok, @"an item that cannot be marked should be reported");
     XCTAssertEqualObjects(error.userInfo[NSFilePathErrorKey], immutable,
                          @"error should name the item, got %@", error);
+    XCTAssertTrue([error.localizedRecoverySuggestion containsString:immutable],
+                 @"the recovery suggestion should explain the consequence and name the item, got %@",
+                 error.localizedRecoverySuggestion);
     XCTAssertEqualObjects([self quarantineAtPath:[root stringByAppendingPathComponent:@"plain.txt"]],
                          @(kValue), @"other items should still be marked");
 }

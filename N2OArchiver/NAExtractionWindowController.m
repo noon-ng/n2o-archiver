@@ -16,6 +16,8 @@
 // Held while working: keeps the app from being suspended by App Nap or quit
 // by sudden or automatic termination during an extraction.
 @property (nonatomic, strong, nullable) id<NSObject> activity;
+// The error shown in the sheet, as composed by presentError:title:.
+@property (nonatomic, strong, nullable) NSError *presentedError;
 @end
 
 @implementation NAExtractionWindowController
@@ -40,7 +42,11 @@
         [[NAPluginManager sharedManager] extractorForFileAtPath:self.archivePath];
 
     if (!extractor) {
-        [self showErrorMessage:@"No plugin found that can handle this archive format."];
+        NSError *error = [NSError errorWithDomain:NSCocoaErrorDomain
+                                             code:NSFeatureUnsupportedError
+                                         userInfo:@{NSLocalizedDescriptionKey:
+            @"N2O Archiver does not recognize the format of this file."}];
+        [self presentError:error title:[self failureTitle]];
         return;
     }
 
@@ -48,9 +54,18 @@
     NSString *destPath = [self createDestinationForArchive:self.archivePath
                                                      error:&dirError];
     if (!destPath) {
-        [self showErrorMessage:
-            [NSString stringWithFormat:@"Cannot create destination: %@",
-                dirError.localizedDescription]];
+        NSMutableDictionary *userInfo = [@{
+            NSLocalizedDescriptionKey:
+                @"The folder for the extracted files could not be created next to the archive.",
+        } mutableCopy];
+        if (dirError) {
+            userInfo[NSLocalizedFailureReasonErrorKey] = dirError.localizedDescription;
+            userInfo[NSUnderlyingErrorKey] = dirError;
+        }
+        [self presentError:[NSError errorWithDomain:NSCocoaErrorDomain
+                                               code:NSFileWriteUnknownError
+                                           userInfo:userInfo]
+                     title:[self failureTitle]];
         return;
     }
 
@@ -94,13 +109,16 @@
                 [s removeCancelledOutputAtPath:destPath];
             } else if (ok && !quarantined) {
                 s.working = NO;
-                [s showErrorMessage:quarantineError.localizedDescription];
+                [s presentError:quarantineError
+                          title:[NSString stringWithFormat:
+                    @"“%@” was extracted, but some files are not marked as downloaded.",
+                    s.archivePath.lastPathComponent]];
             } else if (ok) {
                 s.working = NO;
                 [s extractionFinishedAtPath:destPath];
             } else {
                 s.working = NO;
-                [s showErrorMessage:error.localizedDescription ?: @"Extraction failed."];
+                [s presentError:error title:[s failureTitle]];
             }
         });
     });
@@ -259,11 +277,48 @@
 
 #pragma mark - Error display
 
-- (void)showErrorMessage:(NSString *)message {
-    self.statusLabel.stringValue = message;
+- (NSString *)failureTitle {
+    return [NSString stringWithFormat:@"“%@” could not be extracted.",
+            self.archivePath.lastPathComponent];
+}
+
+// Shows the error as a sheet on the extraction window and closes the window
+// when the sheet is dismissed. The sheet title names the archive; its text
+// combines the error's description, failure reason and recovery suggestion,
+// so long messages such as 7zz output are shown in full and can be selected.
+- (void)presentError:(NSError *)error title:(NSString *)title {
+    self.statusLabel.stringValue = title;
     self.progressBar.hidden = YES;
     self.cancelButton.title = @"Close";
     self.cancelButton.action = @selector(close);
+
+    NSMutableArray<NSString *> *details = [NSMutableArray array];
+    for (NSString *text in @[error.localizedDescription ?: @"",
+                             error.localizedFailureReason ?: @"",
+                             error.localizedRecoverySuggestion ?: @""]) {
+        if (text.length > 0 && ![details containsObject:text]) [details addObject:text];
+    }
+
+    NSMutableDictionary *userInfo = [@{
+        NSLocalizedDescriptionKey: title,
+        NSUnderlyingErrorKey: error,
+    } mutableCopy];
+    if (details.count > 0) {
+        userInfo[NSLocalizedRecoverySuggestionErrorKey] = [details componentsJoinedByString:@"\n\n"];
+    }
+    self.presentedError = [NSError errorWithDomain:error.domain
+                                              code:error.code
+                                          userInfo:userInfo];
+
+    [self presentError:self.presentedError
+        modalForWindow:self.window
+              delegate:self
+    didPresentSelector:@selector(didPresentErrorWithRecovery:contextInfo:)
+           contextInfo:NULL];
+}
+
+- (void)didPresentErrorWithRecovery:(BOOL)didRecover contextInfo:(void *)contextInfo {
+    [self close];
 }
 
 #pragma mark - Actions

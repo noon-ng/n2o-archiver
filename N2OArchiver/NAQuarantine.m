@@ -28,15 +28,20 @@ static const char *const kQuarantineAttribute = "com.apple.quarantine";
 
     if (error) {
         NSString *description = failed.count == 1
-            ? @"1 extracted item could not be marked as downloaded from the "
-              @"internet, so macOS will not check it before it opens."
+            ? @"1 extracted item could not be marked as downloaded from the internet."
             : [NSString stringWithFormat:
-                @"%lu extracted items could not be marked as downloaded from the "
-                @"internet, so macOS will not check them before they open.",
+                @"%lu extracted items could not be marked as downloaded from the internet.",
                 (unsigned long)failed.count];
+        NSString *suggestion = [NSString stringWithFormat:
+            @"macOS will not check %@ before %@. %@: %@",
+            failed.count == 1 ? @"this item" : @"these items",
+            failed.count == 1 ? @"it opens" : @"they open",
+            failed.count == 1 ? @"Item" : @"First item",
+            failed.firstObject];
         *error = [NSError errorWithDomain:NAQuarantineErrorDomain
                                      code:1
                                  userInfo:@{NSLocalizedDescriptionKey: description,
+                                            NSLocalizedRecoverySuggestionErrorKey: suggestion,
                                             NSFilePathErrorKey: failed.firstObject}];
     }
     return NO;

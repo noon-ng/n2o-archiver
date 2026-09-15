@@ -120,6 +120,9 @@ static const char *const kValue = "0083;00000000;N2OArchiverTests;";
     NAAssertFalse(ok, @"an item that cannot be marked should be reported");
     NAAssertEqualObjects(error.userInfo[NSFilePathErrorKey], immutable,
                          @"error should name the item, got %@", error);
+    NAAssertTrue([error.localizedRecoverySuggestion containsString:immutable],
+                 @"the recovery suggestion should explain the consequence and name the item, got %@",
+                 error.localizedRecoverySuggestion);
     NAAssertEqualObjects([self quarantineAtPath:[root stringByAppendingPathComponent:@"plain.txt"]],
                          @(kValue), @"other items should still be marked");
 }

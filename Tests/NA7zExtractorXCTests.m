@@ -197,9 +197,11 @@
 
     XCTAssertFalse(timedOut, @"extraction should not wait for a password");
     XCTAssertFalse(ok, @"encrypted archive should fail");
-    XCTAssertTrue([error.localizedDescription rangeOfString:@"password-protected"].location != NSNotFound,
+    XCTAssertTrue([error.localizedDescription containsString:@"password-protected"],
                  @"error should say the archive is password-protected, got %@",
                  error.localizedDescription);
+    XCTAssertTrue(error.localizedRecoverySuggestion.length > 0,
+                 @"the password error should say what the user can do");
 }
 
 - (void)testListEncryptedArchiveFailsWithPasswordError {
@@ -207,9 +209,23 @@
     NSArray *entries = [self.extractor contentsOfArchiveAtPath:
         [NATestFixtures pathForFixture:@"encrypted.7z"] error:&error];
     XCTAssertNil(entries, @"listing an encrypted archive should fail");
-    XCTAssertTrue([error.localizedDescription rangeOfString:@"password-protected"].location != NSNotFound,
+    XCTAssertTrue([error.localizedDescription containsString:@"password-protected"],
                  @"error should say the archive is password-protected, got %@",
                  error.localizedDescription);
+}
+
+- (void)testToolFailureKeepsStandardErrorAsFailureReason {
+    NSError *error = nil;
+    BOOL ok = [self.extractor extractArchiveAtPath:@"/nonexistent/file.7z"
+                                     toDestination:self.destDir
+                                          progress:nil
+                                             error:&error];
+    XCTAssertFalse(ok, @"a missing archive should fail");
+    XCTAssertEqualObjects(error.localizedDescription, @"7zz could not extract the archive.",
+                         @"the description should be a short summary, got %@",
+                         error.localizedDescription);
+    XCTAssertTrue(error.localizedFailureReason.length > 0,
+                 @"7zz stderr should be kept as the failure reason");
 }
 
 #pragma mark - Cancellation

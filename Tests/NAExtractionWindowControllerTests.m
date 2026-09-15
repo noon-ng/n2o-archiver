@@ -243,6 +243,30 @@
                 @"the activity should end when the work is finished");
 }
 
+#pragma mark - Error presentation
+
+- (void)testErrorIsPresentedAsSheetWithDetails {
+    NSString *dir = [self makeUnwrapDestination];
+    NSString *archive = [self copyFixture:@"corrupt.zip" to:@"broken.zip" under:dir];
+    NAExtractionWindowController *wc =
+        [[NAExtractionWindowController alloc] initWithArchivePath:archive];
+
+    [wc beginExtraction];
+    NAAssertTrue(NAWaitUntil(^BOOL { return !wc.isWorking && wc.window.attachedSheet != nil; }, 10.0),
+                 @"the error should be presented as a sheet on the extraction window");
+
+    NSError *shown = [wc valueForKey:@"presentedError"];
+    NAAssertTrue([shown.localizedDescription containsString:@"“broken.zip” could not be extracted"],
+                 @"the sheet title should name the archive, got %@", shown.localizedDescription);
+    NAAssertTrue([shown.localizedRecoverySuggestion containsString:@"Unrecognized archive format"],
+                 @"the sheet should show the extractor's message in full, got %@",
+                 shown.localizedRecoverySuggestion);
+
+    [wc.window endSheet:wc.window.attachedSheet returnCode:NSAlertFirstButtonReturn];
+    NAAssertTrue(NAWaitUntil(^BOOL { return !wc.window.isVisible; }, 10.0),
+                 @"dismissing the error should close the window");
+}
+
 #pragma mark - Unwrapping a single top-level directory
 
 - (void)testUnwrapMovesDirectoryContentsUp {
@@ -360,6 +384,9 @@
     NAAssertTrue(status.stringValue.length > 0 &&
                  ![status.stringValue isEqualToString:@"Extracting…"],
                  @"the status should show the error, got %@", status.stringValue);
+    if (wc.window.attachedSheet) {
+        [wc.window endSheet:wc.window.attachedSheet returnCode:NSAlertFirstButtonReturn];
+    }
 }
 
 @end
