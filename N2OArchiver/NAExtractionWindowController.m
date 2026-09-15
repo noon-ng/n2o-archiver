@@ -1,5 +1,6 @@
 #import "NAExtractionWindowController.h"
 #import "NAPluginManager.h"
+#import "NAQuarantine.h"
 #include <sys/stat.h>
 
 @interface NAExtractionWindowController () <NSWindowDelegate>
@@ -72,6 +73,15 @@
         }
                                             error:&error];
 
+        // Mark everything extracted, including partial output from a failed
+        // extraction, with the archive's quarantine value. Cancelled output is
+        // removed instead.
+        NSError *quarantineError = nil;
+        BOOL quarantined = weakSelf.cancelled ||
+            [NAQuarantine copyQuarantineFromPath:archivePath
+                                    toTreeAtPath:destPath
+                                           error:&quarantineError];
+
         dispatch_async(dispatch_get_main_queue(), ^{
             __strong typeof(weakSelf) s = weakSelf;
             if (!s) return;
@@ -79,6 +89,9 @@
 
             if (s.cancelled) {
                 [s removeCancelledOutputAtPath:destPath];
+            } else if (ok && !quarantined) {
+                s.working = NO;
+                [s showErrorMessage:quarantineError.localizedDescription];
             } else if (ok) {
                 s.working = NO;
                 [s extractionFinishedAtPath:destPath];

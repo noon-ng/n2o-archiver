@@ -52,6 +52,7 @@ targets:
           - "AppDelegateTests.m"
           - "NA7zExtractorTests.m"
           - "NARarExtractorTests.m"
+          - "NAQuarantineTests.m"
           - "Fixtures"
       - path: Tests/Fixtures
         type: folder

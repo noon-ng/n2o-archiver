@@ -1,6 +1,7 @@
 #import "NATestCase.h"
 #import "NATestFixtures.h"
 #import "NAExtractionWindowController.h"
+#include <sys/xattr.h>
 #import "NAPluginManager.h"
 #import "Plugins/NALibarchiveExtractor.h"
 
@@ -198,6 +199,40 @@
         [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
                                  beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.1]];
     }
+}
+
+#pragma mark - Quarantine
+
+- (void)testExtractedFilesInheritQuarantine {
+    NSString *dir = [self makeUnwrapDestination];
+    NSString *archive = [self copyFixture:@"test.zip" to:@"test.zip" under:dir];
+    const char *value = "0083;00000000;N2OArchiverTests;";
+    setxattr(archive.fileSystemRepresentation, "com.apple.quarantine",
+             value, strlen(value), 0, 0);
+
+    NAExtractionWindowController *wc =
+        [[NAExtractionWindowController alloc] initWithArchivePath:archive];
+    [wc beginExtraction];
+    [self spinRunLoopFor:3.0];
+
+    NSString *dest = [dir stringByAppendingPathComponent:@"test"];
+    NSString *extracted = nil;
+    for (NSString *item in [[NSFileManager defaultManager] enumeratorAtPath:dest]) {
+        if ([item.lastPathComponent isEqualToString:@"a.txt"]) {
+            extracted = [dest stringByAppendingPathComponent:item];
+        }
+    }
+    NAAssertNotNil(extracted, @"a.txt should be extracted under %@", dest);
+
+    char buffer[256];
+    ssize_t length = getxattr(extracted.fileSystemRepresentation, "com.apple.quarantine",
+                              buffer, sizeof(buffer), 0, XATTR_NOFOLLOW);
+    NSString *copied = length > 0
+        ? [[NSString alloc] initWithBytes:buffer length:length encoding:NSUTF8StringEncoding]
+        : nil;
+    NAAssertEqualObjects(copied, @(value),
+                         @"extracted file should carry the archive's quarantine value, got %@",
+                         copied);
 }
 
 #pragma mark - Unwrapping a single top-level directory
