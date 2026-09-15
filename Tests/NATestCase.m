@@ -1,4 +1,24 @@
 #import "NATestCase.h"
+#import "NATestFixtures.h"
+
+#if NA_XCTEST
+
+@implementation NATestCase
+
++ (void)setUp {
+    [super setUp];
+    [NATestFixtures setUp];
+}
+
++ (void)tearDown {
+    [NATestFixtures tearDown];
+    [super tearDown];
+}
+
+@end
+
+#else
+
 #import <objc/runtime.h>
 
 @implementation NATestCase
@@ -35,6 +55,8 @@ static NSMutableArray<Class> *_registeredClasses;
             }
         }
         free(methods);
+        // class_copyMethodList returns methods in no defined order.
+        [testMethods sortUsingSelector:@selector(compare:)];
 
         if (testMethods.count == 0) continue;
 
@@ -45,19 +67,30 @@ static NSMutableArray<Class> *_registeredClasses;
         for (NSString *methodName in testMethods) {
             totalRun++;
             NATestCase *instance = [[cls alloc] init];
+            NSString *failure = nil;
             @try {
                 [instance setUp];
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
                 [instance performSelector:NSSelectorFromString(methodName)];
 #pragma clang diagnostic pop
-                [instance tearDown];
+            } @catch (NSException *e) {
+                failure = e.reason ?: e.name;
+            } @finally {
+                // tearDown runs after failures too, so temporary files are removed.
+                @try {
+                    [instance tearDown];
+                } @catch (NSException *e) {
+                    if (!failure) failure = [@"tearDown: " stringByAppendingString:e.reason ?: e.name];
+                }
+            }
+
+            if (failure) {
+                totalFailed++;
+                fprintf(stderr, "  FAIL: %s — %s\n", methodName.UTF8String, failure.UTF8String);
+            } else {
                 totalPassed++;
                 fprintf(stderr, "  PASS: %s\n", methodName.UTF8String);
-            } @catch (NSException *e) {
-                totalFailed++;
-                fprintf(stderr, "  FAIL: %s — %s\n",
-                        methodName.UTF8String, e.reason.UTF8String);
             }
         }
     }
@@ -68,3 +101,5 @@ static NSMutableArray<Class> *_registeredClasses;
 }
 
 @end
+
+#endif

@@ -55,17 +55,10 @@ targets:
     platform: macOS
     sources:
       - path: Tests
+        # main.m is the entry point of the standalone runner (make test).
         excludes:
           - "main.m"
-          - "NATestCase.h"
-          - "NATestCase.m"
-          - "NALibarchiveExtractorTests.m"
-          - "NAPluginManagerTests.m"
-          - "NAExtractionWindowControllerTests.m"
-          - "AppDelegateTests.m"
-          - "NA7zExtractorTests.m"
-          - "NARarExtractorTests.m"
-          - "NAQuarantineTests.m"
+          - "verify-bundle.sh"
           - "PluginFixture"
           - "Fixtures"
       - path: Tests/Fixtures
@@ -74,6 +67,10 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: sh.n2o.archiver.tests
+        # Makes NATestCase an XCTestCase subclass (see Tests/NATestCase.h).
+        GCC_PREPROCESSOR_DEFINITIONS:
+          - "$(inherited)"
+          - "NA_XCTEST=1"
         HEADER_SEARCH_PATHS:
           - "$(SRCROOT)/N2OArchiver"
           - "$(SRCROOT)/Tests"

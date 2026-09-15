@@ -121,8 +121,12 @@
 // Automatic termination can quit the app while no window is key, including
 // during an extraction; the app quits on its own when idle instead.
 - (void)testInfoPlistDoesNotOptIntoAutomaticTermination {
-    NSDictionary *plist = [NSDictionary dictionaryWithContentsOfFile:@"N2OArchiver/Info.plist"];
-    NAAssertNotNil(plist, @"N2OArchiver/Info.plist should be readable from the repository root");
+    // __FILE__ is Tests/AppDelegateTests.m relative to the repository root when
+    // built by make, and an absolute path when built by Xcode.
+    NSString *repository = [@(__FILE__) stringByDeletingLastPathComponent].stringByDeletingLastPathComponent;
+    NSString *plistPath = [repository stringByAppendingPathComponent:@"N2OArchiver/Info.plist"];
+    NSDictionary *plist = [NSDictionary dictionaryWithContentsOfFile:plistPath];
+    NAAssertNotNil(plist, @"%@ should be readable", plistPath);
     NAAssertNil(plist[@"NSSupportsAutomaticTermination"],
                 @"NSSupportsAutomaticTermination should not be set");
 }
