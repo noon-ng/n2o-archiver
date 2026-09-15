@@ -10,7 +10,9 @@ extern NSString *const NAQuarantineErrorDomain;
 @interface NAQuarantine : NSObject
 
 /// Sets the quarantine value of sourcePath on rootPath and on every item below
-/// it. Symlinks receive the attribute themselves and are not followed. An item
+/// it. Symlinks receive the attribute themselves and are not followed; items
+/// are opened relative to their parent directory with O_NOFOLLOW, so an item
+/// replaced by a symlink during the walk is reported instead of followed. An item
 /// without owner write permission is given it while the attribute is set, then
 /// its mode is restored. A directory that cannot be listed is given owner rwx;
 /// if it still cannot be listed it counts as an item that was not marked.

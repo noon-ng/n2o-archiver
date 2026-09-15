@@ -1,12 +1,24 @@
 #import "NAQuarantine.h"
+#include <dirent.h>
+#include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/xattr.h>
+#include <unistd.h>
 
 NSString *const NAQuarantineErrorDomain = @"sh.n2o.archiver.quarantine";
 
 static const char *const kQuarantineAttribute = "com.apple.quarantine";
 
+// Test hook, called with an item's path after it has been examined and before
+// it is opened. Set through +setWillOpenItemHandler:, which is not in the
+// header.
+static void (^NAWillOpenItemHandler)(NSString *path);
+
 @implementation NAQuarantine
+
++ (void)setWillOpenItemHandler:(nullable void (^)(NSString *path))handler {
+    NAWillOpenItemHandler = [handler copy];
+}
 
 + (BOOL)copyQuarantineFromPath:(NSString *)sourcePath
                   toTreeAtPath:(NSString *)rootPath
@@ -15,7 +27,11 @@ static const char *const kQuarantineAttribute = "com.apple.quarantine";
     if (!value) return YES;
 
     NSMutableArray<NSString *> *failed = [NSMutableArray array];
-    [self markTreeAtPath:rootPath value:value failed:failed];
+    [self markItemNamed:rootPath.fileSystemRepresentation
+            inDirectory:AT_FDCWD
+                   path:rootPath
+                  value:value
+                 failed:failed];
 
     if (failed.count == 0) return YES;
 
@@ -54,57 +70,109 @@ static const char *const kQuarantineAttribute = "com.apple.quarantine";
     return value;
 }
 
-// Marks path and, for a directory, everything below it. Symlinks are marked
-// themselves and not followed. A directory that cannot be listed is given
-// owner read, write and search permission (the access NALibarchiveExtractor
-// already gives its output) and is reported as a failure if it still cannot be
-// listed, instead of being skipped.
-+ (void)markTreeAtPath:(NSString *)path
-                 value:(NSData *)value
-                failed:(NSMutableArray<NSString *> *)failed {
-    [self setQuarantine:value onPath:path failed:failed];
-
+// Marks the item `name` in the directory `parentFD` and, for a directory, the
+// items below it. Each item is opened relative to its parent's descriptor
+// with O_NOFOLLOW (O_SYMLINK for a symlink, which is marked itself) and changed
+// through its own descriptor. If another process replaces an item with a
+// symlink during the walk, the open fails and the item is reported, so no
+// change reaches the symlink's target.
++ (void)markItemNamed:(const char *)name
+          inDirectory:(int)parentFD
+                 path:(NSString *)path
+                value:(NSData *)value
+               failed:(NSMutableArray<NSString *> *)failed {
     struct stat st;
-    if (lstat(path.fileSystemRepresentation, &st) != 0 || !S_ISDIR(st.st_mode)) return;
-
-    NSFileManager *fm = [NSFileManager defaultManager];
-    NSArray<NSString *> *children = [fm contentsOfDirectoryAtPath:path error:nil];
-    if (!children && (st.st_mode & 0700) != 0700 &&
-        chmod(path.fileSystemRepresentation, (st.st_mode & 07777) | 0700) == 0) {
-        children = [fm contentsOfDirectoryAtPath:path error:nil];
+    if (fstatat(parentFD, name, &st, AT_SYMLINK_NOFOLLOW) != 0) {
+        [failed addObject:path];
+        return;
     }
-    if (!children) {
+    if (NAWillOpenItemHandler) NAWillOpenItemHandler(path);
+
+    BOOL isLink = S_ISLNK(st.st_mode);
+    BOOL isDirectory = S_ISDIR(st.st_mode);
+    int flags = isLink ? (O_RDONLY | O_SYMLINK)
+              : isDirectory ? (O_RDONLY | O_DIRECTORY | O_NOFOLLOW)
+              : (O_RDONLY | O_NOFOLLOW | O_NONBLOCK);
+    mode_t originalMode = st.st_mode & 07777;
+    BOOL addedReadAccess = NO;
+
+    int fd = openat(parentFD, name, flags);
+    if (fd < 0 && errno == EACCES && !isLink) {
+        // An unreadable directory gets owner rwx (the access
+        // NALibarchiveExtractor gives its output); an unreadable file gets
+        // owner read until it is marked. AT_SYMLINK_NOFOLLOW changes only a
+        // symlink itself if the item has been replaced by one.
+        mode_t added = isDirectory ? 0700 : 0400;
+        if (fchmodat(parentFD, name, originalMode | added, AT_SYMLINK_NOFOLLOW) == 0) {
+            addedReadAccess = !isDirectory;
+            fd = openat(parentFD, name, flags);
+        }
+    }
+    if (fd < 0) {
+        [failed addObject:path];
+        return;
+    }
+
+    struct stat opened;
+    if (fstat(fd, &opened) != 0) {
+        [failed addObject:path];
+        close(fd);
+        return;
+    }
+    isDirectory = S_ISDIR(opened.st_mode);
+
+    // Setting an extended attribute needs write permission on the item
+    // itself, which read-only files and directories from archives often lack.
+    BOOL marked = fsetxattr(fd, kQuarantineAttribute, value.bytes, value.length, 0, 0) == 0;
+    if (!marked && errno == EACCES && !S_ISLNK(opened.st_mode) &&
+        !(opened.st_mode & S_IWUSR)) {
+        mode_t current = opened.st_mode & 07777;
+        if (fchmod(fd, current | S_IWUSR) == 0) {
+            marked = fsetxattr(fd, kQuarantineAttribute, value.bytes, value.length, 0, 0) == 0;
+            fchmod(fd, current);
+        }
+    }
+    if (addedReadAccess) fchmod(fd, originalMode);
+    if (!marked) [failed addObject:path];
+
+    if (isDirectory) {
+        [self markChildrenOfDirectory:fd path:path value:value failed:failed];
+    }
+    close(fd);
+}
+
++ (void)markChildrenOfDirectory:(int)fd
+                           path:(NSString *)path
+                          value:(NSData *)value
+                         failed:(NSMutableArray<NSString *> *)failed {
+    int listFD = dup(fd);
+    DIR *dir = listFD >= 0 ? fdopendir(listFD) : NULL;
+    if (!dir) {
+        if (listFD >= 0) close(listFD);
         if (![failed containsObject:path]) [failed addObject:path];
         return;
     }
 
-    for (NSString *child in children) {
-        [self markTreeAtPath:[path stringByAppendingPathComponent:child]
-                       value:value
-                      failed:failed];
+    // Collect the names first, then mark them, so the directory stream is not
+    // read while its entries are being changed.
+    NSMutableArray<NSData *> *names = [NSMutableArray array];
+    struct dirent *entry;
+    while ((entry = readdir(dir))) {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
+        [names addObject:[NSData dataWithBytes:entry->d_name length:strlen(entry->d_name) + 1]];
     }
-}
+    closedir(dir);
 
-+ (void)setQuarantine:(NSData *)value
-               onPath:(NSString *)path
-               failed:(NSMutableArray<NSString *> *)failed {
-    const char *p = path.fileSystemRepresentation;
-    if (setxattr(p, kQuarantineAttribute, value.bytes, value.length, 0, XATTR_NOFOLLOW) == 0) {
-        return;
+    NSFileManager *fm = [NSFileManager defaultManager];
+    for (NSData *childName in names) {
+        NSString *component = [fm stringWithFileSystemRepresentation:childName.bytes
+                                                              length:childName.length - 1];
+        [self markItemNamed:childName.bytes
+                inDirectory:fd
+                       path:[path stringByAppendingPathComponent:component]
+                      value:value
+                     failed:failed];
     }
-
-    // Setting an extended attribute needs write permission on the item itself,
-    // which read-only files and directories from archives often lack.
-    struct stat st;
-    if (errno == EACCES && lstat(p, &st) == 0 && !S_ISLNK(st.st_mode) &&
-        !(st.st_mode & S_IWUSR) && chmod(p, (st.st_mode & 07777) | S_IWUSR) == 0) {
-        int result = setxattr(p, kQuarantineAttribute, value.bytes, value.length,
-                              0, XATTR_NOFOLLOW);
-        chmod(p, st.st_mode & 07777);
-        if (result == 0) return;
-    }
-
-    [failed addObject:path];
 }
 
 @end

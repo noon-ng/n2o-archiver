@@ -3,6 +3,11 @@
 #include <sys/stat.h>
 #include <sys/xattr.h>
 
+// Private test hook: called with each item's path just before it is opened.
+@interface NAQuarantine (Testing)
++ (void)setWillOpenItemHandler:(void (^)(NSString *path))handler;
+@end
+
 @interface NAQuarantineTests : NATestCase
 @property (nonatomic, copy) NSString *workDir;
 @end
@@ -161,6 +166,68 @@ static const char *const kValue = "0083;00000000;N2OArchiverTests;";
     NAAssertFalse(ok, @"a directory that cannot be listed should be reported, not skipped");
     NAAssertEqualObjects(error.userInfo[NSFilePathErrorKey], sealed,
                          @"the error should name the directory, got %@", error);
+}
+
+#pragma mark - Items replaced during the walk
+
+// Another account with write access to the output could replace an item with
+// a symlink between the walk checking it and changing it. The hook runs at
+// that point.
+- (void)testDirectoryReplacedBySymlinkIsNotFollowed {
+    NSString *archive = [self writeFile:@"archive.zip"];
+    setxattr(archive.fileSystemRepresentation, "com.apple.quarantine", kValue, strlen(kValue), 0, 0);
+    NSString *outsideFile = [self writeFile:@"outside/secret.txt"];
+    NSString *outside = outsideFile.stringByDeletingLastPathComponent;
+    NSString *root = [self.workDir stringByAppendingPathComponent:@"out"];
+    NSString *inner = [[self writeFile:@"out/inner/file.txt"] stringByDeletingLastPathComponent];
+
+    [NAQuarantine setWillOpenItemHandler:^(NSString *path) {
+        if ([path isEqualToString:inner]) {
+            [[NSFileManager defaultManager] removeItemAtPath:inner error:nil];
+            symlink(outside.fileSystemRepresentation, inner.fileSystemRepresentation);
+        }
+    }];
+    NSError *error = nil;
+    [NAQuarantine copyQuarantineFromPath:archive toTreeAtPath:root error:&error];
+    [NAQuarantine setWillOpenItemHandler:nil];
+
+    NAAssertNil([self quarantineAtPath:outsideFile],
+                @"a file reached through the swapped-in symlink should not be marked");
+    NAAssertNil([self quarantineAtPath:outside],
+                @"the symlink target should not be marked");
+}
+
+- (void)testReadOnlyFileReplacedBySymlinkKeepsTargetMode {
+    NSString *archive = [self writeFile:@"archive.zip"];
+    setxattr(archive.fileSystemRepresentation, "com.apple.quarantine", kValue, strlen(kValue), 0, 0);
+    NSString *outsideFile = [self writeFile:@"outside/readonly.txt"];
+    chmod(outsideFile.fileSystemRepresentation, 0444);
+    NSString *root = [self.workDir stringByAppendingPathComponent:@"out"];
+    NSString *readOnly = [self writeFile:@"out/readonly.txt"];
+    chmod(readOnly.fileSystemRepresentation, 0444);
+    struct stat before;
+    stat(outsideFile.fileSystemRepresentation, &before);
+
+    [NAQuarantine setWillOpenItemHandler:^(NSString *path) {
+        if ([path isEqualToString:readOnly]) {
+            unlink(readOnly.fileSystemRepresentation);
+            symlink(outsideFile.fileSystemRepresentation, readOnly.fileSystemRepresentation);
+        }
+    }];
+    NSError *error = nil;
+    [NAQuarantine copyQuarantineFromPath:archive toTreeAtPath:root error:&error];
+    [NAQuarantine setWillOpenItemHandler:nil];
+
+    struct stat st;
+    stat(outsideFile.fileSystemRepresentation, &st);
+    NAAssertTrue((st.st_mode & 07777) == 0444,
+                 @"the symlink target's mode should not change, got %o", st.st_mode & 07777);
+    // A chmod that is undone afterwards still updates the change time.
+    NAAssertTrue(st.st_ctimespec.tv_sec == before.st_ctimespec.tv_sec &&
+                 st.st_ctimespec.tv_nsec == before.st_ctimespec.tv_nsec,
+                 @"the symlink target should not have been changed at all");
+    NAAssertNil([self quarantineAtPath:outsideFile],
+                @"the symlink target should not be marked");
 }
 
 #pragma mark - Helpers
