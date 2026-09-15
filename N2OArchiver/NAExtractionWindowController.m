@@ -1,5 +1,6 @@
 #import "NAExtractionWindowController.h"
 #import "NAPluginManager.h"
+#include <sys/stat.h>
 
 @interface NAExtractionWindowController ()
 @property (nonatomic, copy) NSString *archivePath;
@@ -35,13 +36,11 @@
         return;
     }
 
-    NSString *destPath = [self destinationPathForArchive:self.archivePath];
     NSFileManager *fm = [NSFileManager defaultManager];
     NSError *dirError = nil;
-    if (![fm createDirectoryAtPath:destPath
-       withIntermediateDirectories:YES
-                        attributes:nil
-                             error:&dirError]) {
+    NSString *destPath = [self createDestinationForArchive:self.archivePath
+                                                     error:&dirError];
+    if (!destPath) {
         [self showErrorMessage:
             [NSString stringWithFormat:@"Cannot create destination: %@",
                 dirError.localizedDescription]];
@@ -72,7 +71,8 @@
             if (!s) return;
 
             if (s.cancelled) {
-                // Clean up partial extraction.
+                // Clean up partial extraction. destPath was created by
+                // createDestinationForArchive:, so it held nothing beforehand.
                 [fm removeItemAtPath:destPath error:nil];
             } else if (ok) {
                 [s extractionFinishedAtPath:destPath];
@@ -102,6 +102,33 @@
 
     return [parent stringByAppendingPathComponent:
             baseName.stringByDeletingPathExtension];
+}
+
+// Creates a new, empty directory for the extraction: the archive's base name,
+// or "<name> 2", "<name> 3", ... if that path is taken by any file or
+// directory. mkdir fails with EEXIST instead of reusing an existing directory,
+// so anything already on disk is never written into or removed on cancel.
+- (nullable NSString *)createDestinationForArchive:(NSString *)archivePath
+                                             error:(NSError **)error {
+    NSString *base = [self destinationPathForArchive:archivePath];
+
+    for (NSUInteger n = 1; ; n++) {
+        NSString *candidate = (n == 1)
+            ? base
+            : [NSString stringWithFormat:@"%@ %lu", base, (unsigned long)n];
+
+        if (mkdir(candidate.fileSystemRepresentation, 0755) == 0) {
+            return candidate;
+        }
+        if (errno != EEXIST) {
+            if (error) {
+                *error = [NSError errorWithDomain:NSPOSIXErrorDomain
+                                             code:errno
+                                         userInfo:@{NSFilePathErrorKey: candidate}];
+            }
+            return nil;
+        }
+    }
 }
 
 #pragma mark - Completion

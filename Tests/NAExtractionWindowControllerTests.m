@@ -7,9 +7,12 @@
 @interface NAExtractionWindowControllerTests : NATestCase
 @end
 
-// Private method under test.
+// Private methods under test.
 @interface NAExtractionWindowController (Testing)
+- (NSString *)createDestinationForArchive:(NSString *)archivePath
+                                    error:(NSError **)error;
 - (void)unwrapSingleItemDirectoryAtPath:(NSString *)destPath;
+- (void)cancelExtraction:(id)sender;
 @end
 
 @interface NAExtractionWindowControllerTests ()
@@ -72,6 +75,79 @@
 
     // Clean up.
     [[NSFileManager defaultManager] removeItemAtPath:expectedDir error:nil];
+}
+
+#pragma mark - Destination directory
+
+- (void)testDestinationUsesArchiveBaseName {
+    NSString *dir = [self makeUnwrapDestination];
+    NSString *archive = [self copyFixture:@"test.zip" to:@"test.zip" under:dir];
+
+    NSError *error = nil;
+    NSString *dest = [self.unwrapController createDestinationForArchive:archive
+                                                                   error:&error];
+
+    NAAssertEqualObjects(dest, [dir stringByAppendingPathComponent:@"test"],
+                         @"destination should be the archive base name, got %@ (%@)",
+                         dest, error);
+    NAAssertTrue([self fileExists:@"test" under:dir], @"destination should be created");
+}
+
+- (void)testDestinationSkipsExistingDirectory {
+    NSString *dir = [self makeUnwrapDestination];
+    NSString *archive = [self copyFixture:@"test.zip" to:@"test.zip" under:dir];
+    [self writeFile:@"test/keep.txt" under:dir];
+
+    NSString *dest = [self.unwrapController createDestinationForArchive:archive
+                                                                   error:nil];
+
+    NAAssertEqualObjects(dest, [dir stringByAppendingPathComponent:@"test 2"],
+                         @"existing directory should not be reused, got %@", dest);
+    NAAssertEqual([[NSFileManager defaultManager]
+                      contentsOfDirectoryAtPath:[dir stringByAppendingPathComponent:@"test"]
+                                          error:nil].count, 1u,
+                  @"existing directory should be unchanged");
+}
+
+- (void)testDestinationSkipsArchiveWithoutExtension {
+    NSString *dir = [self makeUnwrapDestination];
+    NSString *archive = [self copyFixture:@"test.zip" to:@"mystery" under:dir];
+
+    NSString *dest = [self.unwrapController createDestinationForArchive:archive
+                                                                   error:nil];
+
+    NAAssertEqualObjects(dest, [dir stringByAppendingPathComponent:@"mystery 2"],
+                         @"archive file itself should not be used as destination, got %@",
+                         dest);
+}
+
+- (void)testCancelKeepsExistingDirectory {
+    NSString *dir = [self makeUnwrapDestination];
+    NSString *archive = [self copyFixture:@"test.zip" to:@"test.zip" under:dir];
+    [self writeFile:@"test/keep.txt" under:dir];
+
+    NAExtractionWindowController *wc =
+        [[NAExtractionWindowController alloc] initWithArchivePath:archive];
+    [wc beginExtraction];
+    [wc cancelExtraction:nil];
+
+    NSDate *timeout = [NSDate dateWithTimeIntervalSinceNow:2.0];
+    while ([[NSDate date] compare:timeout] == NSOrderedAscending) {
+        [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
+                                 beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.1]];
+    }
+
+    NAAssertTrue([self fileExists:@"test/keep.txt" under:dir],
+                 @"cancel should not remove a directory that existed before extraction");
+    NAAssertFalse([self fileExists:@"test 2" under:dir],
+                  @"cancel should remove the directory created for the extraction");
+}
+
+- (NSString *)copyFixture:(NSString *)fixture to:(NSString *)name under:(NSString *)dir {
+    NSString *path = [dir stringByAppendingPathComponent:name];
+    [[NSFileManager defaultManager] copyItemAtPath:[NATestFixtures pathForFixture:fixture]
+                                            toPath:path error:nil];
+    return path;
 }
 
 #pragma mark - Unwrapping a single top-level directory
