@@ -7,9 +7,11 @@ NS_ASSUME_NONNULL_BEGIN
 
 + (instancetype)sharedManager;
 
-/// Loads plugin bundles from Contents/PlugIns and
+/// Contents/PlugIns of the main bundle and
 /// ~/Library/Application Support/N2OArchiver/Plugins.
-- (void)loadPlugins;
++ (NSArray<NSString *> *)defaultPluginDirectories;
+
+/// Loads trusted plugin bundles from the given directories.
 - (void)loadPluginsFromDirectories:(NSArray<NSString *> *)directories;
 
 /// YES when the bundle at path has a valid code signature from an

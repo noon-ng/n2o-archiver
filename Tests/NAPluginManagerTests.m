@@ -145,12 +145,29 @@
 
 #pragma mark - Plugin loading (external bundles)
 
-- (void)testLoadPluginsDoesNotCrashOnEmptyDirectory {
+- (void)testLoadPluginsFromEmptyDirectoryRegistersNothing {
     NAPluginManager *pm = [[NAPluginManager alloc] init];
-    // loadPlugins scans app bundle and ~/Library/Application Support.
-    // Neither should have bundles in a test environment; verify no crash.
-    [pm loadPlugins];
-    // No assertion — just verifying it doesn't throw.
+    NSString *dir = [NSTemporaryDirectory() stringByAppendingPathComponent:
+        [NSString stringWithFormat:@"n2o-plugins-%u", arc4random()]];
+    [[NSFileManager defaultManager] createDirectoryAtPath:dir withIntermediateDirectories:YES
+                                               attributes:nil error:nil];
+
+    [pm loadPluginsFromDirectories:@[dir, [dir stringByAppendingPathComponent:@"missing"]]];
+
+    [[NSFileManager defaultManager] removeItemAtPath:dir error:nil];
+    NAAssertEqual([pm allPluginClasses].count, 0u,
+                  @"empty and missing directories should register no plugins");
+}
+
+- (void)testDefaultPluginDirectories {
+    NSArray<NSString *> *dirs = [NAPluginManager defaultPluginDirectories];
+    NSString *userDir = [NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory,
+                                                             NSUserDomainMask, YES).firstObject
+        stringByAppendingPathComponent:@"N2OArchiver/Plugins"];
+    NAAssertTrue([dirs containsObject:NSBundle.mainBundle.builtInPlugInsPath],
+                 @"the app's PlugIns folder should be scanned, got %@", dirs);
+    NAAssertEqualObjects(dirs.lastObject, userDir,
+                         @"the user's Application Support folder should be scanned, got %@", dirs);
 }
 
 @end

@@ -54,6 +54,16 @@ targets:
     type: bundle.unit-test
     platform: macOS
     sources:
+      # The app sources are compiled into the test bundle, which runs without
+      # a host app: a hosted run launches N2OArchiver, whose AppDelegate shows
+      # the open panel and scans the user's plugin folder.
+      - path: N2OArchiver
+        excludes:
+          - "main.m"
+          - "Info.plist"
+          - "N2OArchiver.entitlements"
+          - "Resources"
+          - "*.xcassets"
       - path: Tests
         # main.m is the entry point of the standalone runner (make test).
         excludes:
@@ -67,6 +77,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: sh.n2o.archiver.tests
+        TEST_HOST: ""
+        BUNDLE_LOADER: ""
         # Makes NATestCase an XCTestCase subclass (see Tests/NATestCase.h).
         GCC_PREPROCESSOR_DEFINITIONS:
           - "$(inherited)"
@@ -90,5 +102,3 @@ targets:
           - "-liconv"
         CLANG_ENABLE_MODULES: YES
         GENERATE_INFOPLIST_FILE: YES
-    dependencies:
-      - target: N2OArchiver

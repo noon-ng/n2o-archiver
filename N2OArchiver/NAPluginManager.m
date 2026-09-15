@@ -37,10 +37,6 @@
     [self registerBuiltinClass:[NALibarchiveExtractor class]];
 }
 
-- (void)loadPlugins {
-    [self loadPluginsFromDirectories:[self pluginSearchPaths]];
-}
-
 - (void)loadPluginsFromDirectories:(NSArray<NSString *> *)directories {
     for (NSString *dir in directories) {
         NSArray<NSString *> *contents =
@@ -145,7 +141,7 @@
 
 #pragma mark - Private
 
-- (NSArray<NSString *> *)pluginSearchPaths {
++ (NSArray<NSString *> *)defaultPluginDirectories {
     NSMutableArray<NSString *> *paths = [NSMutableArray array];
 
     // Built-in plugins inside the app bundle.

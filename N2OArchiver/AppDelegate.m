@@ -11,6 +11,14 @@
 
 @implementation AppDelegate
 
+- (instancetype)init {
+    self = [super init];
+    if (self) {
+        _pluginDirectories = [NAPluginManager defaultPluginDirectories];
+    }
+    return self;
+}
+
 - (void)applicationWillFinishLaunching:(NSNotification *)notification {
     self.windowControllers = [NSMutableArray array];
 
@@ -19,7 +27,7 @@
     [pm registerBuiltinExtractors];
 
     // Load external plugin bundles.
-    [pm loadPlugins];
+    [pm loadPluginsFromDirectories:self.pluginDirectories];
 }
 
 - (void)applicationDidFinishLaunching:(NSNotification *)notification {
@@ -100,6 +108,7 @@
 - (void)extractFile:(NSString *)path {
     NAExtractionWindowController *wc =
         [[NAExtractionWindowController alloc] initWithArchivePath:path];
+    if (self.revealHandler) wc.revealHandler = self.revealHandler;
     [self.windowControllers addObject:wc];
 
     __weak typeof(self) weakSelf = self;

@@ -8,7 +8,8 @@
 #import "Plugins/NALibarchiveExtractor.h"
 
 // The extraction itself is tested in NAExtractionJobTests; these tests cover
-// what the window shows and how it closes.
+// what the window shows and how it closes. The one test that reaches the
+// Finder reveal replaces the reveal handler.
 
 // Private methods under test.
 @interface NAExtractionWindowController (Testing)
@@ -56,6 +57,8 @@
 - (void)testBeginExtractionCreatesOutputAndClosesWindow {
     NSString *archive = [self copyFixture:@"test.zip" to:@"test.zip"];
     NAExtractionWindowController *wc = [[NAExtractionWindowController alloc] initWithArchivePath:archive];
+    NSMutableArray<NSString *> *revealed = [NSMutableArray array];
+    wc.revealHandler = ^(NSString *path) { [revealed addObject:path]; };
 
     [wc beginExtraction];
     NAAssertTrue(wc.window.isVisible, @"the window should be shown while extracting");
@@ -65,6 +68,8 @@
     NAAssertTrue([self fileExists:@"test/a.txt"], @"extraction should create the output directory");
     NAAssertEqualObjects([[wc valueForKey:@"statusLabel"] stringValue], @"Done.",
                          @"the status should say the extraction is done");
+    NAAssertEqualObjects(revealed, @[[self.workDir stringByAppendingPathComponent:@"test"]],
+                         @"the output folder should be revealed");
     NAAssertTrue(NAWaitUntil(^BOOL { return !wc.window.isVisible; }, 10.0),
                  @"the window should close after a successful extraction");
 }

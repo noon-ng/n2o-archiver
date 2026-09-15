@@ -10,6 +10,10 @@ NS_ASSUME_NONNULL_BEGIN
 /// is shown in the window; errors are shown in a sheet.
 - (void)beginExtraction;
 
+/// Called with the output folder after a successful extraction. Defaults to
+/// selecting it in Finder; replaceable so tests do not open Finder windows.
+@property (nonatomic, copy) void (^revealHandler)(NSString *path);
+
 /// YES from beginExtraction until the extraction has returned and, if it failed
 /// or was cancelled, its output has been removed.
 @property (nonatomic, readonly, getter=isWorking) BOOL working;

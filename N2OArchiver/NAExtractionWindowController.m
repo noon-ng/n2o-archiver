@@ -24,6 +24,9 @@
     self = [super initWithWindow:window];
     if (self) {
         _archivePath = [archivePath copy];
+        _revealHandler = ^(NSString *path) {
+            [[NSWorkspace sharedWorkspace] selectFile:nil inFileViewerRootedAtPath:path];
+        };
         window.delegate = self;
         [self setupUI];
         self.filenameLabel.stringValue = archivePath.lastPathComponent;
@@ -91,9 +94,7 @@
     self.progressBar.doubleValue = 100.0;
     self.statusLabel.stringValue = @"Done.";
 
-    // Reveal in Finder.
-    [[NSWorkspace sharedWorkspace] selectFile:nil
-                     inFileViewerRootedAtPath:destPath];
+    self.revealHandler(destPath);
 
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{

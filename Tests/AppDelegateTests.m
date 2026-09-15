@@ -6,18 +6,29 @@
 #import "Plugins/NALibarchiveExtractor.h"
 
 @interface AppDelegateTests : NATestCase
+@property (nonatomic, strong) NSMutableArray<NSString *> *revealed;
 @end
 
 @implementation AppDelegateTests
 
-#pragma mark - File open handling
-
-- (void)testOpenFileReturnsYes {
+// A delegate that scans no plugin folders and does not reveal in Finder, after
+// applicationWillFinishLaunching:. Revealed paths are recorded in revealed.
+- (AppDelegate *)launchedDelegate {
     AppDelegate *delegate = [[AppDelegate alloc] init];
-    // Trigger willFinishLaunching to set up internal state.
+    delegate.pluginDirectories = @[];
+    NSMutableArray<NSString *> *revealed = [NSMutableArray array];
+    self.revealed = revealed;
+    delegate.revealHandler = ^(NSString *path) { [revealed addObject:path]; };
     [delegate applicationWillFinishLaunching:
         [NSNotification notificationWithName:NSApplicationWillFinishLaunchingNotification
                                       object:NSApp]];
+    return delegate;
+}
+
+#pragma mark - File open handling
+
+- (void)testOpenFileReturnsYes {
+    AppDelegate *delegate = [self launchedDelegate];
 
     NSString *path = [NATestFixtures pathForFixture:@"test.zip"];
     BOOL handled = [delegate application:NSApp openFile:path];
@@ -26,20 +37,21 @@
     NAAssertTrue(NAWaitUntil(^BOOL { return [[delegate valueForKey:@"windowControllers"] count] == 0; }, 10.0),
                  @"the extraction window should close");
 
-    // Clean up extraction output.
     NSString *expectedDir = [[NATestFixtures fixtureDir]
         stringByAppendingPathComponent:@"test"];
+    NAAssertEqualObjects(self.revealed, @[expectedDir],
+                         @"the delegate's reveal handler should receive the output folder");
     [[NSFileManager defaultManager] removeItemAtPath:expectedDir error:nil];
 }
 
 #pragma mark - Plugin registration
 
 - (void)testWillFinishLaunchingRegistersPlugins {
-    AppDelegate *delegate = [[AppDelegate alloc] init];
-    [delegate applicationWillFinishLaunching:
-        [NSNotification notificationWithName:NSApplicationWillFinishLaunchingNotification
-                                      object:NSApp]];
+    [self launchedDelegate];
 
+    NAAssertEqualObjects([[AppDelegate alloc] init].pluginDirectories,
+                         [NAPluginManager defaultPluginDirectories],
+                         @"a new delegate should scan the default plugin folders");
     NSArray *classes = [[NAPluginManager sharedManager] allPluginClasses];
     NAAssertTrue(classes.count >= 1,
                  @"at least one plugin should be registered after launch");
@@ -57,10 +69,7 @@
 }
 
 - (void)testClosedExtractionWindowIsReleased {
-    AppDelegate *delegate = [[AppDelegate alloc] init];
-    [delegate applicationWillFinishLaunching:
-        [NSNotification notificationWithName:NSApplicationWillFinishLaunchingNotification
-                                      object:NSApp]];
+    AppDelegate *delegate = [self launchedDelegate];
 
     NSString *path = [NATestFixtures pathForFixture:@"multi.zip"];
     [delegate application:NSApp openFile:path];
@@ -80,19 +89,13 @@
 #pragma mark - Quit
 
 - (void)testQuitWhenIdleTerminatesNow {
-    AppDelegate *delegate = [[AppDelegate alloc] init];
-    [delegate applicationWillFinishLaunching:
-        [NSNotification notificationWithName:NSApplicationWillFinishLaunchingNotification
-                                      object:NSApp]];
+    AppDelegate *delegate = [self launchedDelegate];
     NAAssertEqual([delegate applicationShouldTerminate:NSApp], NSTerminateNow,
                   @"quit with no extraction running should terminate immediately");
 }
 
 - (void)testQuitDuringExtractionCancelsAndWaits {
-    AppDelegate *delegate = [[AppDelegate alloc] init];
-    [delegate applicationWillFinishLaunching:
-        [NSNotification notificationWithName:NSApplicationWillFinishLaunchingNotification
-                                      object:NSApp]];
+    AppDelegate *delegate = [self launchedDelegate];
 
     NSFileManager *fm = [NSFileManager defaultManager];
     NSString *dir = [NSTemporaryDirectory() stringByAppendingPathComponent:

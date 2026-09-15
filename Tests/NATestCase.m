@@ -3,10 +3,15 @@
 
 #if NA_XCTEST
 
+#import <AppKit/AppKit.h>
+
 @implementation NATestCase
 
 + (void)setUp {
     [super setUp];
+    // The test bundle runs without a host app; window controller tests need
+    // NSApp, as in the standalone runner's main.m.
+    [NSApplication sharedApplication];
     [NATestFixtures setUp];
 }
 
