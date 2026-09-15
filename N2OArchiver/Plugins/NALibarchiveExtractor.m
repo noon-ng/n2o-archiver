@@ -1,14 +1,51 @@
 #import "NALibarchiveExtractor.h"
 #import <archive.h>
 #import <archive_entry.h>
+#include <sys/stat.h>
 
 static NSString *const NALibarchiveErrorDomain = @"sh.n2o.archiver.libarchive";
+
+// Every format archive_read_support_format_all enables except mtree, which
+// accepts most text files and can reference files elsewhere on disk, plus raw,
+// which reads a single compressed file (.gz, .bz2, .xz without tar).
+static struct archive *NANewArchiveReader(void) {
+    struct archive *a = archive_read_new();
+    archive_read_support_filter_all(a);
+    archive_read_support_format_7zip(a);
+    archive_read_support_format_ar(a);
+    archive_read_support_format_cab(a);
+    archive_read_support_format_cpio(a);
+    archive_read_support_format_empty(a);
+    archive_read_support_format_iso9660(a);
+    archive_read_support_format_lha(a);
+    archive_read_support_format_rar(a);
+    archive_read_support_format_rar5(a);
+    archive_read_support_format_tar(a);
+    archive_read_support_format_warc(a);
+    archive_read_support_format_xar(a);
+    archive_read_support_format_zip(a);
+    archive_read_support_format_raw(a);
+    return a;
+}
+
+// The raw format matches any input; it only describes a real archive when a
+// compression filter was detected in front of it.
+static BOOL NAIsUncompressedRaw(struct archive *a) {
+    return (archive_format(a) & ARCHIVE_FORMAT_BASE_MASK) == ARCHIVE_FORMAT_RAW
+        && archive_filter_count(a) <= 1;
+}
 
 @interface NALibarchiveExtractor ()
 @property (atomic, assign) BOOL cancelled;
 @end
 
-@implementation NALibarchiveExtractor
+@implementation NALibarchiveExtractor {
+    // Progress state for the extraction in progress.
+    NAExtractionProgressBlock _progressBlock;
+    int64_t _archiveSize;
+    double _lastReportedFraction;
+    NSString *_currentEntryName;
+}
 
 #pragma mark - NAExtractorPlugin (class methods)
 
@@ -16,8 +53,7 @@ static NSString *const NALibarchiveErrorDomain = @"sh.n2o.archiver.libarchive";
     return @[
         @"zip", @"tar", @"gz", @"tgz", @"bz2", @"tbz2", @"xz", @"txz",
         @"lz", @"lzma", @"zst", @"zstd", @"cab", @"iso", @"cpio",
-        @"ar", @"lzh", @"lha", @"warc",
-        @"tar.gz", @"tar.bz2", @"tar.xz", @"tar.lz", @"tar.zst"
+        @"ar", @"lzh", @"lha", @"warc"
     ];
 }
 
@@ -35,23 +71,19 @@ static NSString *const NALibarchiveErrorDomain = @"sh.n2o.archiver.libarchive";
 }
 
 + (BOOL)canHandleFileAtPath:(NSString *)path {
-    struct archive *a = archive_read_new();
-    archive_read_support_filter_all(a);
-    archive_read_support_format_all(a);
+    struct archive *a = NANewArchiveReader();
 
     BOOL result = NO;
     if (archive_read_open_filename(a, path.fileSystemRepresentation, 10240)
         == ARCHIVE_OK) {
-        // mtree bids on most text files and "empty" on any zero-byte file, so
-        // a successful open alone does not indicate an archive. Reading the
-        // first header rejects text that is not a valid mtree spec; mtree and
-        // empty are then excluded explicitly.
+        // "empty" bids on any zero-byte file and raw on any input, so a
+        // successful open alone does not indicate an archive.
         struct archive_entry *entry;
         int r = archive_read_next_header(a, &entry);
         int format = archive_format(a) & ARCHIVE_FORMAT_BASE_MASK;
         result = r >= ARCHIVE_WARN
-              && format != ARCHIVE_FORMAT_MTREE
-              && format != ARCHIVE_FORMAT_EMPTY;
+              && format != ARCHIVE_FORMAT_EMPTY
+              && !NAIsUncompressedRaw(a);
     }
     archive_read_free(a);
 
@@ -64,11 +96,8 @@ static NSString *const NALibarchiveErrorDomain = @"sh.n2o.archiver.libarchive";
                toDestination:(NSString *)destPath
                     progress:(NAExtractionProgressBlock)progressBlock
                        error:(NSError **)error {
-    struct archive *a = archive_read_new();
+    struct archive *a = NANewArchiveReader();
     struct archive *ext = archive_write_disk_new();
-
-    archive_read_support_filter_all(a);
-    archive_read_support_format_all(a);
 
     // Entry paths are rewritten to absolute paths under destPath, so
     // SECURE_NOABSOLUTEPATHS cannot be used. SECURE_NODOTDOT rejects entries
@@ -105,9 +134,13 @@ static NSString *const NALibarchiveErrorDomain = @"sh.n2o.archiver.libarchive";
         return NO;
     }
 
-    // Determine total size for progress reporting.
-    int64_t totalSize = [self totalSizeOfArchive:archivePath];
-    int64_t extractedSize = 0;
+    // Progress is the share of the archive file read so far, which needs no
+    // separate pass over the archive.
+    struct stat st;
+    _archiveSize = stat(archivePath.fileSystemRepresentation, &st) == 0 ? st.st_size : 0;
+    _progressBlock = progressBlock;
+    _lastReportedFraction = -1;
+    _currentEntryName = @"";
 
     struct archive_entry *entry;
     BOOL success = YES;
@@ -118,6 +151,23 @@ static NSString *const NALibarchiveErrorDomain = @"sh.n2o.archiver.libarchive";
             success = NO;
             break;
         }
+
+        if (NAIsUncompressedRaw(a)) {
+            [self setError:error description:@"Unrecognized archive format" code:4];
+            success = NO;
+            break;
+        }
+
+        // The raw format names its single entry "data"; use the archive's
+        // name without its compression extension instead.
+        if ((archive_format(a) & ARCHIVE_FORMAT_BASE_MASK) == ARCHIVE_FORMAT_RAW) {
+            NSString *name = archivePath.lastPathComponent.stringByDeletingPathExtension;
+            archive_entry_copy_pathname(entry, name.fileSystemRepresentation);
+        }
+
+        const char *entryPath = archive_entry_pathname(entry);
+        _currentEntryName = (entryPath ? [NSString stringWithUTF8String:entryPath] : nil)
+                            .lastPathComponent ?: @"";
 
         // Rewrite the entry pathname, and the hardlink target if any, to be
         // under the destination. Hardlink targets are otherwise resolved
@@ -130,30 +180,26 @@ static NSString *const NALibarchiveErrorDomain = @"sh.n2o.archiver.libarchive";
             [self setError:error fromArchive:ext code:3];
             success = NO;
             break;
-        } else if (r != ARCHIVE_OK) {
-            NSLog(@"N2OArchiver: header write error: %s", archive_error_string(ext));
-        } else if (archive_entry_size(entry) > 0) {
-            r = [self copyDataFromArchive:a toWriter:ext];
-            if (r != ARCHIVE_OK) {
-                if (self.cancelled) {
-                    [self setCancelledError:error];
-                } else {
-                    [self setError:error fromArchive:a code:2];
-                }
-                success = NO;
-                break;
+        }
+        if (r != ARCHIVE_OK) {
+            NSLog(@"N2OArchiver: header write warning: %s", archive_error_string(ext));
+        }
+
+        // Entries without a stored size (such as raw) still carry data, so
+        // data is copied for every entry; directories return EOF at once.
+        r = [self copyDataFromArchive:a toWriter:ext];
+        if (r != ARCHIVE_OK) {
+            if (self.cancelled) {
+                [self setCancelledError:error];
+            } else {
+                [self setError:error fromArchive:a code:2];
             }
+            success = NO;
+            break;
         }
         archive_write_finish_entry(ext);
 
-        extractedSize += archive_entry_size(entry);
-        if (progressBlock && totalSize > 0) {
-            double fraction = (double)extractedSize / (double)totalSize;
-            if (fraction > 1.0) fraction = 1.0;
-            NSString *name = [NSString stringWithUTF8String:
-                              archive_entry_pathname(entry)];
-            progressBlock(fraction, name.lastPathComponent);
-        }
+        [self reportProgressFromArchive:a force:YES];
     }
 
     // The cancel may arrive after the last entry; report it so the caller
@@ -163,6 +209,11 @@ static NSString *const NALibarchiveErrorDomain = @"sh.n2o.archiver.libarchive";
         success = NO;
     }
 
+    if (success && progressBlock) {
+        progressBlock(1.0, _currentEntryName);
+    }
+
+    _progressBlock = nil;
     archive_read_free(a);
     archive_write_free(ext);
     return success;
@@ -176,9 +227,7 @@ static NSString *const NALibarchiveErrorDomain = @"sh.n2o.archiver.libarchive";
 
 - (NSArray<NSString *> *)contentsOfArchiveAtPath:(NSString *)path
                                            error:(NSError **)error {
-    struct archive *a = archive_read_new();
-    archive_read_support_filter_all(a);
-    archive_read_support_format_all(a);
+    struct archive *a = NANewArchiveReader();
 
     int r = archive_read_open_filename(a, path.fileSystemRepresentation, 10240);
     if (r != ARCHIVE_OK) {
@@ -190,9 +239,18 @@ static NSString *const NALibarchiveErrorDomain = @"sh.n2o.archiver.libarchive";
     NSMutableArray<NSString *> *entries = [NSMutableArray array];
     struct archive_entry *entry;
     while (archive_read_next_header(a, &entry) == ARCHIVE_OK) {
-        const char *name = archive_entry_pathname(entry);
-        if (name) {
-            [entries addObject:[NSString stringWithUTF8String:name]];
+        if (NAIsUncompressedRaw(a)) {
+            [self setError:error description:@"Unrecognized archive format" code:4];
+            archive_read_free(a);
+            return nil;
+        }
+        if ((archive_format(a) & ARCHIVE_FORMAT_BASE_MASK) == ARCHIVE_FORMAT_RAW) {
+            [entries addObject:path.lastPathComponent.stringByDeletingPathExtension];
+        } else {
+            const char *name = archive_entry_pathname(entry);
+            if (name) {
+                [entries addObject:[NSString stringWithUTF8String:name]];
+            }
         }
         archive_read_data_skip(a);
     }
@@ -228,30 +286,6 @@ static NSString *const NALibarchiveErrorDomain = @"sh.n2o.archiver.libarchive";
     return data;
 }
 
-- (int64_t)totalSizeOfArchive:(NSString *)archivePath {
-    struct archive *a = archive_read_new();
-    archive_read_support_filter_all(a);
-    archive_read_support_format_all(a);
-
-    if (archive_read_open_filename(a, archivePath.fileSystemRepresentation, 10240)
-        != ARCHIVE_OK) {
-        archive_read_free(a);
-        return -1;
-    }
-
-    int64_t total = 0;
-    struct archive_entry *entry;
-    while (archive_read_next_header(a, &entry) == ARCHIVE_OK) {
-        // This pass decompresses the whole archive; stop early on cancel.
-        if (self.cancelled) break;
-        total += archive_entry_size(entry);
-        archive_read_data_skip(a);
-    }
-
-    archive_read_free(a);
-    return total;
-}
-
 - (int)copyDataFromArchive:(struct archive *)ar
                   toWriter:(struct archive *)aw {
     const void *buff;
@@ -270,7 +304,24 @@ static NSString *const NALibarchiveErrorDomain = @"sh.n2o.archiver.libarchive";
             NSLog(@"N2OArchiver: write error: %s", archive_error_string(aw));
             return r;
         }
+
+        [self reportProgressFromArchive:ar force:NO];
     }
+}
+
+// Reports the share of the archive file consumed so far. Within an entry,
+// reports only after at least 1% more has been read, so a large file gives
+// steady updates without one callback per data block.
+- (void)reportProgressFromArchive:(struct archive *)ar force:(BOOL)force {
+    if (!_progressBlock || _archiveSize <= 0) return;
+
+    double fraction = (double)archive_filter_bytes(ar, -1) / (double)_archiveSize;
+    if (fraction > 1.0) fraction = 1.0;
+    if (fraction < _lastReportedFraction) return;
+    if (!force && fraction - _lastReportedFraction < 0.01) return;
+
+    _lastReportedFraction = fraction;
+    _progressBlock(fraction, _currentEntryName);
 }
 
 - (void)setCancelledError:(NSError **)error {
@@ -283,13 +334,20 @@ static NSString *const NALibarchiveErrorDomain = @"sh.n2o.archiver.libarchive";
 - (void)setError:(NSError **)error
      fromArchive:(struct archive *)a
             code:(NSInteger)code {
-    if (!error) return;
     const char *msg = archive_error_string(a);
-    NSString *desc = msg ? [NSString stringWithUTF8String:msg]
-                         : @"Unknown archive error";
+    [self setError:error
+       description:msg ? [NSString stringWithUTF8String:msg] : @"Unknown archive error"
+              code:code];
+}
+
+- (void)setError:(NSError **)error
+     description:(NSString *)description
+            code:(NSInteger)code {
+    if (!error) return;
     *error = [NSError errorWithDomain:NALibarchiveErrorDomain
                                  code:code
-                             userInfo:@{NSLocalizedDescriptionKey: desc}];
+                             userInfo:@{NSLocalizedDescriptionKey:
+                                            description ?: @"Unknown archive error"}];
 }
 
 @end

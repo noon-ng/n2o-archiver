@@ -121,6 +121,84 @@
                    @"/nonexistent/file.zip"]);
 }
 
+#pragma mark - Single compressed files
+
+- (void)testExtractSingleGzipFile {
+    [self assertExtractsSingleCompressedFixture:@"plain.txt.gz"];
+}
+
+- (void)testExtractSingleBzip2File {
+    [self assertExtractsSingleCompressedFixture:@"plain.txt.bz2"];
+}
+
+- (void)testExtractSingleXzFile {
+    [self assertExtractsSingleCompressedFixture:@"plain.txt.xz"];
+}
+
+- (void)testCanHandleSingleCompressedFile {
+    NAAssertTrue([NALibarchiveExtractor canHandleFileAtPath:
+                  [NATestFixtures pathForFixture:@"plain.txt.gz"]],
+                 @"a gzip-compressed text file should be accepted");
+}
+
+- (void)testExtractPlainTextFails {
+    NSString *path = [NATestFixtures pathForFixture:@"notes.zip"];
+    [@"hello\n" writeToFile:path atomically:NO encoding:NSUTF8StringEncoding error:nil];
+    NSError *error = nil;
+    BOOL ok = [self.extractor extractArchiveAtPath:path
+                                     toDestination:self.destDir
+                                          progress:nil
+                                             error:&error];
+    [[NSFileManager defaultManager] removeItemAtPath:path error:nil];
+    NAAssertFalse(ok, @"a text file named .zip should not extract");
+    NAAssertEqualObjects([[NSFileManager defaultManager]
+                             contentsOfDirectoryAtPath:self.destDir error:nil], @[],
+                         @"nothing should be written");
+}
+
+- (void)assertExtractsSingleCompressedFixture:(NSString *)name {
+    NSError *error = nil;
+    BOOL ok = [self.extractor extractArchiveAtPath:[NATestFixtures pathForFixture:name]
+                                     toDestination:self.destDir
+                                          progress:nil
+                                             error:&error];
+    NAAssertTrue(ok, @"%@ should extract: %@", name, error.localizedDescription);
+    NSString *contents = [NSString stringWithContentsOfFile:
+        [self.destDir stringByAppendingPathComponent:@"plain.txt"]
+                                                   encoding:NSUTF8StringEncoding error:nil];
+    NAAssertEqualObjects(contents, @"plain contents\n",
+                         @"%@ should produce plain.txt, directory has %@", name,
+                         [[NSFileManager defaultManager] contentsOfDirectoryAtPath:self.destDir error:nil]);
+}
+
+#pragma mark - Progress without a size pass
+
+- (void)testProgressIsNondecreasingAndEndsAtOne {
+    NSMutableArray<NSNumber *> *fractions = [NSMutableArray array];
+    NSError *error = nil;
+    BOOL ok = [self.extractor extractArchiveAtPath:[NATestFixtures pathForFixture:@"test.tar.gz"]
+                                     toDestination:self.destDir
+                                          progress:^(double fraction, NSString *entry) {
+        [fractions addObject:@(fraction)];
+    }
+                                             error:&error];
+    NAAssertTrue(ok, @"extraction should succeed: %@", error.localizedDescription);
+    NAAssertTrue(fractions.count > 0, @"progress should be reported");
+    for (NSUInteger i = 1; i < fractions.count; i++) {
+        NAAssertTrue(fractions[i].doubleValue >= fractions[i - 1].doubleValue,
+                     @"progress should not go backwards: %@", fractions);
+    }
+    NAAssertTrue(fractions.lastObject.doubleValue == 1.0,
+                 @"last progress should be 1.0: %@", fractions);
+}
+
+- (void)testSupportedExtensionsAreSingleComponents {
+    for (NSString *ext in [NALibarchiveExtractor supportedExtensions]) {
+        NAAssertTrue([ext rangeOfString:@"."].location == NSNotFound,
+                     @"%@ can never equal -[NSString pathExtension]", ext);
+    }
+}
+
 #pragma mark - Cancellation
 
 - (void)testCancelStopsExtractionAfterCurrentEntry {

@@ -11,7 +11,7 @@ static const uint8_t kRar5Signature[] = {'R', 'a', 'r', '!', 0x1A, 0x07, 0x01, 0
 @implementation NARarExtractor
 
 + (NSArray<NSString *> *)supportedExtensions {
-    return @[@"rar", @"r00"];
+    return @[@"rar"];
 }
 
 + (NSArray<NSString *> *)supportedUTIs {

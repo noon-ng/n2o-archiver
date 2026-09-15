@@ -132,6 +132,11 @@
                   @"nothing should be extracted");
 }
 
+- (void)testSupportedExtensionsExcludeContinuationVolumes {
+    NAAssertFalse([[NARarExtractor supportedExtensions] containsObject:@"r00"],
+                  @".r00 is a continuation volume, not an archive to open");
+}
+
 #pragma mark - Error handling
 
 - (void)testExtractMissingFileFails {
