@@ -4,6 +4,13 @@
 #import "AppDelegate.h"
 #import "NAPluginManager.h"
 #import "Plugins/NALibarchiveExtractor.h"
+#import "Plugins/NA7zExtractor.h"
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
+
+@interface AppDelegate (Testing)
+- (NSArray<UTType *> *)allowedContentTypes;
+
+@end
 
 @interface AppDelegateTests : NATestCase
 @property (nonatomic, strong) NSMutableArray<NSString *> *revealed;
@@ -119,19 +126,70 @@
     NAAssertFalse(outputExists, @"quit during extraction should remove partial output");
 }
 
+#pragma mark - Document types
+
+// Info.plist decides which files Finder offers the app for; the extractors'
+// supportedUTIs decide what it can open. The two must name the same types.
+- (void)testInfoPlistDocumentTypesAreTheExtractorsUTIs {
+    NSMutableSet<NSString *> *declared = [NSMutableSet set];
+    for (NSDictionary *type in [self infoPlist][@"CFBundleDocumentTypes"]) {
+        [declared addObjectsFromArray:type[@"LSItemContentTypes"]];
+    }
+
+    NSMutableSet<NSString *> *supported = [NSMutableSet set];
+    for (Class<NAExtractorPlugin> cls in @[[NA7zExtractor class], [NALibarchiveExtractor class]]) {
+        [supported addObjectsFromArray:[cls supportedUTIs]];
+    }
+
+    NAAssertEqualObjects(declared, supported,
+                         @"Info.plist and the built-in extractors should name the same types");
+}
+
+- (void)testSupportedUTIsAreArchiveTypesTheSystemKnows {
+    for (Class<NAExtractorPlugin> cls in @[[NA7zExtractor class], [NALibarchiveExtractor class]]) {
+        for (NSString *identifier in [cls supportedUTIs]) {
+            UTType *type = [UTType typeWithIdentifier:identifier];
+            NAAssertTrue(type.isDeclared, @"%@ should be a type the system declares", identifier);
+            NAAssertTrue([type conformsToType:UTTypeArchive] || [type conformsToType:UTTypeDiskImage],
+                         @"%@ should be an archive or disk image type", identifier);
+        }
+    }
+}
+
+- (void)testOpenPanelOffersEverySupportedExtensionAndType {
+    AppDelegate *delegate = [self launchedDelegate];
+    NSSet<UTType *> *offered = [NSSet setWithArray:[delegate allowedContentTypes]];
+
+    for (Class<NAExtractorPlugin> cls in [[NAPluginManager sharedManager] allPluginClasses]) {
+        for (NSString *extension in [cls supportedExtensions]) {
+            UTType *type = [UTType typeWithFilenameExtension:extension];
+            NAAssertTrue([offered containsObject:type],
+                         @"the open panel should offer .%@ (%@)", extension, type.identifier);
+        }
+        for (NSString *identifier in [cls supportedUTIs]) {
+            NAAssertTrue([offered containsObject:[UTType typeWithIdentifier:identifier]],
+                         @"the open panel should offer %@", identifier);
+        }
+    }
+}
+
 #pragma mark - Info.plist
 
 // Automatic termination can quit the app while no window is key, including
 // during an extraction; the app quits on its own when idle instead.
 - (void)testInfoPlistDoesNotOptIntoAutomaticTermination {
-    // __FILE__ is Tests/AppDelegateTests.m relative to the repository root when
-    // built by make, and an absolute path when built by Xcode.
-    NSString *repository = [@(__FILE__) stringByDeletingLastPathComponent].stringByDeletingLastPathComponent;
-    NSString *plistPath = [repository stringByAppendingPathComponent:@"N2OArchiver/Info.plist"];
-    NSDictionary *plist = [NSDictionary dictionaryWithContentsOfFile:plistPath];
-    NAAssertNotNil(plist, @"%@ should be readable", plistPath);
-    NAAssertNil(plist[@"NSSupportsAutomaticTermination"],
+    NAAssertNil([self infoPlist][@"NSSupportsAutomaticTermination"],
                 @"NSSupportsAutomaticTermination should not be set");
+}
+
+// The app's Info.plist as built. __FILE__ is Tests/AppDelegateTests.m relative
+// to the repository root when built by make, and an absolute path under Xcode.
+- (NSDictionary *)infoPlist {
+    NSString *repository = [@(__FILE__) stringByDeletingLastPathComponent].stringByDeletingLastPathComponent;
+    NSString *path = [repository stringByAppendingPathComponent:@"N2OArchiver/Info.plist"];
+    NSDictionary *plist = [NSDictionary dictionaryWithContentsOfFile:path];
+    NAAssertNotNil(plist, @"%@ should be readable", path);
+    return plist;
 }
 
 @end

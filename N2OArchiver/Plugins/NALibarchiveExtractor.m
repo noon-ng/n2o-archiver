@@ -43,21 +43,32 @@ static BOOL NAIsUncompressedRaw(struct archive *a) {
     return @[
         @"zip", @"rar", @"tar", @"gz", @"tgz", @"bz2", @"tbz2", @"xz", @"txz",
         @"lz", @"lzma", @"zst", @"zstd", @"cab", @"iso", @"cpio",
-        @"ar", @"lzh", @"lha", @"warc"
+        @"ar", @"lzh", @"lha", @"warc", @"xar"
     ];
 }
 
+// The system type for each supported extension, where one exists. .lz, .zst,
+// .zstd and .ar have no system type; files with those extensions are offered
+// in the open panel through a type derived from the extension, but the app is
+// not registered for them in Info.plist.
 + (NSArray<NSString *> *)supportedUTIs {
     return @[
         @"public.zip-archive",
         @"com.rarlab.rar-archive",
         @"public.tar-archive",
         @"org.gnu.gnu-zip-archive",
+        @"org.gnu.gnu-zip-tar-archive",
         @"public.bzip2-archive",
+        @"public.tar-bzip2-archive",
         @"org.tukaani.xz-archive",
-        @"com.apple.xar-archive",
+        @"org.tukaani.tar-xz-archive",
+        @"org.tukaani.lzma-archive",
+        @"com.microsoft.cab",
+        @"public.iso-image",
         @"public.cpio-archive",
-        @"public.iso-image"
+        @"cx.c3.lha-archive",
+        @"org.archive.warc-archive",
+        @"com.apple.xar-archive"
     ];
 }
 

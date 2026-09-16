@@ -56,20 +56,8 @@
     panel.canChooseFiles = YES;
     panel.message = @"Select archives to extract";
 
-    // Build the allowed extensions from all registered plugins.
-    NSMutableArray<NSString *> *extensions = [NSMutableArray array];
-    for (Class<NAExtractorPlugin> cls in
-         [[NAPluginManager sharedManager] allPluginClasses]) {
-        [extensions addObjectsFromArray:[cls supportedExtensions]];
-    }
-    if (extensions.count > 0) {
-        NSMutableArray<UTType *> *types = [NSMutableArray array];
-        for (NSString *ext in extensions) {
-            UTType *type = [UTType typeWithFilenameExtension:ext];
-            if (type) [types addObject:type];
-        }
-        panel.allowedContentTypes = types;
-    }
+    NSArray<UTType *> *types = [self allowedContentTypes];
+    if (types.count > 0) panel.allowedContentTypes = types;
 
     self.openPanelCount++;
     [panel beginWithCompletionHandler:^(NSModalResponse result) {
@@ -104,6 +92,24 @@
 }
 
 #pragma mark - Private
+
+// The types the open panel offers: every registered extractor's UTIs, plus a
+// type for each of its extensions. Extensions the system has no type for
+// (.lz, .zst, .ar) yield a dynamic type, which still filters by extension.
+- (NSArray<UTType *> *)allowedContentTypes {
+    NSMutableOrderedSet<UTType *> *types = [NSMutableOrderedSet orderedSet];
+    for (Class<NAExtractorPlugin> cls in [[NAPluginManager sharedManager] allPluginClasses]) {
+        for (NSString *identifier in [cls supportedUTIs]) {
+            UTType *type = [UTType typeWithIdentifier:identifier];
+            if (type) [types addObject:type];
+        }
+        for (NSString *extension in [cls supportedExtensions]) {
+            UTType *type = [UTType typeWithFilenameExtension:extension];
+            if (type) [types addObject:type];
+        }
+    }
+    return types.array;
+}
 
 - (void)extractFile:(NSString *)path {
     NAExtractionWindowController *wc =
