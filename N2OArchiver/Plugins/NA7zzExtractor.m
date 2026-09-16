@@ -15,26 +15,26 @@
     return @[];
 }
 
-+ (NSString *)formatTypeForFileAtPath:(NSString *)path {
++ (NSString *)formatTypeForFileAtURL:(NSURL *)url {
     [NSException raise:NSInternalInconsistencyException
-                format:@"%@ must override +formatTypeForFileAtPath:", self];
+                format:@"%@ must override +formatTypeForFileAtURL:", self];
     return @"";
 }
 
-+ (nullable NSData *)headerOfFileAtPath:(NSString *)path length:(NSUInteger)length {
-    NSFileHandle *fh = [NSFileHandle fileHandleForReadingAtPath:path];
++ (nullable NSData *)headerOfFileAtURL:(NSURL *)url length:(NSUInteger)length {
+    NSFileHandle *fh = [NSFileHandle fileHandleForReadingFromURL:url error:nil];
     if (!fh) return nil;
     NSData *header = [fh readDataOfLength:length];
     [fh closeFile];
     return header;
 }
 
-+ (BOOL)canHandleFileAtPath:(NSString *)path {
++ (BOOL)canHandleFileAtURL:(NSURL *)url {
     NSUInteger longest = 0;
     for (NSData *signature in [self signatures]) {
         longest = MAX(longest, signature.length);
     }
-    NSData *header = [self headerOfFileAtPath:path length:longest];
+    NSData *header = [self headerOfFileAtURL:url length:longest];
 
     for (NSData *signature in [self signatures]) {
         if (header.length >= signature.length &&
@@ -45,22 +45,22 @@
     return NO;
 }
 
-- (BOOL)extractArchiveAtPath:(NSString *)archivePath
-               toDestination:(NSString *)destPath
-                    progress:(NSProgress *)progress
-                       error:(NSError **)error {
-    return [NA7zzTool extractArchiveAtPath:archivePath
-                                formatType:[[self class] formatTypeForFileAtPath:archivePath]
-                             toDestination:destPath
-                                  progress:progress
-                                     error:error];
+- (BOOL)extractArchiveAtURL:(NSURL *)archiveURL
+           toDestinationURL:(NSURL *)destinationURL
+                   progress:(NSProgress *)progress
+                      error:(NSError **)error {
+    return [NA7zzTool extractArchiveAtURL:archiveURL
+                               formatType:[[self class] formatTypeForFileAtURL:archiveURL]
+                         toDestinationURL:destinationURL
+                                 progress:progress
+                                    error:error];
 }
 
-- (NSArray<NSString *> *)contentsOfArchiveAtPath:(NSString *)path
-                                           error:(NSError **)error {
-    return [NA7zzTool contentsOfArchiveAtPath:path
-                                   formatType:[[self class] formatTypeForFileAtPath:path]
-                                        error:error];
+- (NSArray<NSString *> *)contentsOfArchiveAtURL:(NSURL *)url
+                                          error:(NSError **)error {
+    return [NA7zzTool contentsOfArchiveAtURL:url
+                                  formatType:[[self class] formatTypeForFileAtURL:url]
+                                       error:error];
 }
 
 @end

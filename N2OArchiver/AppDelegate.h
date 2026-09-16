@@ -5,11 +5,11 @@ NS_ASSUME_NONNULL_BEGIN
 @interface AppDelegate : NSObject <NSApplicationDelegate>
 
 /// Directories scanned for plugin bundles at launch. Defaults to
-/// +[NAPluginManager defaultPluginDirectories].
-@property (nonatomic, copy) NSArray<NSString *> *pluginDirectories;
+/// +[NAPluginManager defaultPluginDirectoryURLs].
+@property (nonatomic, copy) NSArray<NSURL *> *pluginDirectoryURLs;
 
 /// When set, replaces the Finder reveal of each extraction window.
-@property (nonatomic, copy, nullable) void (^revealHandler)(NSString *path);
+@property (nonatomic, copy, nullable) void (^revealHandler)(NSURL *url);
 
 @end
 

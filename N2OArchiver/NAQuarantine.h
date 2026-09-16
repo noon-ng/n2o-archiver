@@ -15,18 +15,18 @@ typedef NS_ERROR_ENUM(NAQuarantineErrorDomain, NAQuarantineError) {
 /// downloaded archive before they first open.
 @interface NAQuarantine : NSObject
 
-/// Sets the quarantine value of sourcePath on rootPath and on every item below
+/// Sets the quarantine value of sourceURL on the item at rootURL and on every item below
 /// it. Symlinks receive the attribute themselves and are not followed; items
 /// are opened relative to their parent directory with O_NOFOLLOW, so an item
 /// replaced by a symlink during the walk is reported instead of followed. An item
 /// without owner write permission is given it while the attribute is set, then
 /// its mode is restored. A directory that cannot be listed is given owner rwx;
 /// if it still cannot be listed it counts as an item that was not marked.
-/// Returns YES when sourcePath has no quarantine value or every item received
+/// Returns YES when sourceURL has no quarantine value or every item received
 /// it; otherwise NO with an error naming how many items were not marked.
-+ (BOOL)copyQuarantineFromPath:(NSString *)sourcePath
-                  toTreeAtPath:(NSString *)rootPath
-                         error:(NSError **)error;
++ (BOOL)copyQuarantineFromURL:(NSURL *)sourceURL
+                  toTreeAtURL:(NSURL *)rootURL
+                        error:(NSError **)error;
 
 @end
 

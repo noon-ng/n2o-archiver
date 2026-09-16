@@ -14,7 +14,7 @@
 - (instancetype)init {
     self = [super init];
     if (self) {
-        _pluginDirectories = [NAPluginManager defaultPluginDirectories];
+        _pluginDirectoryURLs = [NAPluginManager defaultPluginDirectoryURLs];
     }
     return self;
 }
@@ -27,7 +27,7 @@
     [pm registerBuiltinExtractors];
 
     // Load external plugin bundles.
-    [pm loadPluginsFromDirectories:self.pluginDirectories];
+    [pm loadPluginsFromDirectoryURLs:self.pluginDirectoryURLs];
 }
 
 - (void)applicationDidFinishLaunching:(NSNotification *)notification {
@@ -39,7 +39,7 @@
 
 - (void)application:(NSApplication *)application openURLs:(NSArray<NSURL *> *)urls {
     for (NSURL *url in urls) {
-        if (url.isFileURL) [self extractFile:url.path];
+        if (url.isFileURL) [self extractFileAtURL:url];
     }
 }
 
@@ -64,7 +64,7 @@
         self.openPanelCount--;
         if (result == NSModalResponseOK) {
             for (NSURL *url in panel.URLs) {
-                [self extractFile:url.path];
+                [self extractFileAtURL:url];
             }
         }
         [self terminateIfIdle];
@@ -111,9 +111,9 @@
     return types.array;
 }
 
-- (void)extractFile:(NSString *)path {
+- (void)extractFileAtURL:(NSURL *)url {
     NAExtractionWindowController *wc =
-        [[NAExtractionWindowController alloc] initWithArchivePath:path];
+        [[NAExtractionWindowController alloc] initWithArchiveURL:url];
     if (self.revealHandler) wc.revealHandler = self.revealHandler;
     [self.windowControllers addObject:wc];
 

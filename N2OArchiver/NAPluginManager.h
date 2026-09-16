@@ -9,15 +9,15 @@ NS_ASSUME_NONNULL_BEGIN
 
 /// Contents/PlugIns of the main bundle and
 /// ~/Library/Application Support/N2OArchiver/Plugins.
-+ (NSArray<NSString *> *)defaultPluginDirectories;
++ (NSArray<NSURL *> *)defaultPluginDirectoryURLs;
 
 /// Loads trusted plugin bundles from the given directories.
-- (void)loadPluginsFromDirectories:(NSArray<NSString *> *)directories;
+- (void)loadPluginsFromDirectoryURLs:(NSArray<NSURL *> *)directoryURLs;
 
 /// YES when the bundle at path has a valid code signature from an
 /// Apple-issued certificate (Developer ID or App Store), including nested
 /// code. Plugins that fail this check are not loaded.
-+ (BOOL)isTrustedPluginAtPath:(NSString *)path error:(NSError **)error;
++ (BOOL)isTrustedPluginAtURL:(NSURL *)url error:(NSError **)error;
 /// Adds an extractor class after those already registered; used for built-in
 /// extractors and for classes from loaded plugin bundles.
 - (void)registerExtractorClass:(Class<NAExtractorPlugin>)cls;
@@ -28,7 +28,7 @@ NS_ASSUME_NONNULL_BEGIN
 /// libarchive: Homebrew's 7zz is built without the RAR codec.
 - (void)registerBuiltinExtractors;
 
-- (nullable id<NAExtractorPlugin>)extractorForFileAtPath:(NSString *)path;
+- (nullable id<NAExtractorPlugin>)extractorForFileAtURL:(NSURL *)url;
 - (NSArray<Class<NAExtractorPlugin>> *)allPluginClasses;
 
 @end

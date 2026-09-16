@@ -54,15 +54,15 @@ typedef NS_ERROR_ENUM(NA7zzErrorDomain, NA7zzError) {
 /// the NAExtractorPlugin contract: its units are percent, and it is polled
 /// for cancellation while 7zz runs; when cancelled the task is terminated and
 /// the call returns NO with NSUserCancelledError.
-+ (BOOL)extractArchiveAtPath:(NSString *)archivePath
-                  formatType:(NSString *)formatType
-               toDestination:(NSString *)destPath
-                    progress:(NSProgress *)progress
-                       error:(NSError **)error;
++ (BOOL)extractArchiveAtURL:(NSURL *)archiveURL
+                 formatType:(NSString *)formatType
+           toDestinationURL:(NSURL *)destinationURL
+                   progress:(NSProgress *)progress
+                      error:(NSError **)error;
 
-+ (nullable NSArray<NSString *> *)contentsOfArchiveAtPath:(NSString *)path
-                                               formatType:(NSString *)formatType
-                                                    error:(NSError **)error;
++ (nullable NSArray<NSString *> *)contentsOfArchiveAtURL:(NSURL *)url
+                                              formatType:(NSString *)formatType
+                                                   error:(NSError **)error;
 
 @end
 

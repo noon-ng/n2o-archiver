@@ -32,8 +32,7 @@
     NAPluginManager *pm = [[NAPluginManager alloc] init];
     [pm registerExtractorClass:[NALibarchiveExtractor class]];
 
-    id<NAExtractorPlugin> ext = [pm extractorForFileAtPath:
-        [NATestFixtures pathForFixture:@"test.zip"]];
+    id<NAExtractorPlugin> ext = [pm extractorForFileAtURL:[NATestFixtures URLForFixture:@"test.zip"]];
     NAAssertNotNil(ext, @"should find extractor for .zip");
     NAAssertTrue([ext isKindOfClass:[NALibarchiveExtractor class]],
                  @"should be NALibarchiveExtractor");
@@ -43,8 +42,7 @@
     NAPluginManager *pm = [[NAPluginManager alloc] init];
     [pm registerExtractorClass:[NALibarchiveExtractor class]];
 
-    id<NAExtractorPlugin> ext = [pm extractorForFileAtPath:
-        [NATestFixtures pathForFixture:@"test.tar.gz"]];
+    id<NAExtractorPlugin> ext = [pm extractorForFileAtURL:[NATestFixtures URLForFixture:@"test.tar.gz"]];
     NAAssertNotNil(ext, @"should find extractor for .tar.gz");
 }
 
@@ -59,7 +57,7 @@
     NSString *noExt = [NATestFixtures pathForFixture:@"mystery_archive"];
     [[NSFileManager defaultManager] copyItemAtPath:src toPath:noExt error:nil];
 
-    id<NAExtractorPlugin> ext = [pm extractorForFileAtPath:noExt];
+    id<NAExtractorPlugin> ext = [pm extractorForFileAtURL:NAFileURL(noExt)];
     NAAssertNotNil(ext, @"should find extractor via magic bytes even without extension");
 
     [[NSFileManager defaultManager] removeItemAtPath:noExt error:nil];
@@ -70,8 +68,7 @@
 - (void)testBuiltinRouting7zUses7zExtractor {
     NAPluginManager *pm = [[NAPluginManager alloc] init];
     [pm registerBuiltinExtractors];
-    id<NAExtractorPlugin> ext = [pm extractorForFileAtPath:
-        [NATestFixtures pathForFixture:@"test.7z"]];
+    id<NAExtractorPlugin> ext = [pm extractorForFileAtURL:[NATestFixtures URLForFixture:@"test.7z"]];
     NAAssertTrue([ext isKindOfClass:[NA7zExtractor class]],
                  @".7z should route to NA7zExtractor, got %@", [ext class]);
 }
@@ -80,8 +77,7 @@
 - (void)testBuiltinRoutingRarUsesLibarchive {
     NAPluginManager *pm = [[NAPluginManager alloc] init];
     [pm registerBuiltinExtractors];
-    id<NAExtractorPlugin> ext = [pm extractorForFileAtPath:
-        [NATestFixtures pathForFixture:@"test.rar"]];
+    id<NAExtractorPlugin> ext = [pm extractorForFileAtURL:[NATestFixtures URLForFixture:@"test.rar"]];
     NAAssertTrue([ext isKindOfClass:[NALibarchiveExtractor class]],
                  @".rar should route to NALibarchiveExtractor, got %@", [ext class]);
 }
@@ -89,8 +85,7 @@
 - (void)testBuiltinRoutingZipUsesLibarchive {
     NAPluginManager *pm = [[NAPluginManager alloc] init];
     [pm registerBuiltinExtractors];
-    id<NAExtractorPlugin> ext = [pm extractorForFileAtPath:
-        [NATestFixtures pathForFixture:@"test.zip"]];
+    id<NAExtractorPlugin> ext = [pm extractorForFileAtURL:[NATestFixtures URLForFixture:@"test.zip"]];
     NAAssertTrue([ext isKindOfClass:[NALibarchiveExtractor class]],
                  @".zip should route to NALibarchiveExtractor, got %@", [ext class]);
 }
@@ -100,7 +95,7 @@
 - (void)testAdHocSignedPluginIsNotLoaded {
     NAPluginManager *pm = [[NAPluginManager alloc] init];
     NSString *dir = [NATestFixtures fixtureDir];
-    [pm loadPluginsFromDirectories:@[dir]];
+    [pm loadPluginsFromDirectoryURLs:@[NAFileURL(dir)]];
 
     NSBundle *bundle = [NSBundle bundleWithPath:
         [dir stringByAppendingPathComponent:@"AdHocSignedPlugin.bundle"]];
@@ -111,8 +106,7 @@
 
 - (void)testAdHocSignedPluginIsNotTrusted {
     NSError *error = nil;
-    BOOL trusted = [NAPluginManager isTrustedPluginAtPath:
-        [[NATestFixtures fixtureDir] stringByAppendingPathComponent:@"AdHocSignedPlugin.bundle"]
+    BOOL trusted = [NAPluginManager isTrustedPluginAtURL:NAFileURL([[NATestFixtures fixtureDir] stringByAppendingPathComponent:@"AdHocSignedPlugin.bundle"])
                                                     error:&error];
     NAAssertFalse(trusted, @"an ad-hoc signature is not issued by Apple");
     NAAssertNotNil(error, @"the rejection should carry an error");
@@ -120,7 +114,7 @@
 
 - (void)testAppleSignedBundleIsTrusted {
     NSError *error = nil;
-    BOOL trusted = [NAPluginManager isTrustedPluginAtPath:@"/System/Applications/Calculator.app"
+    BOOL trusted = [NAPluginManager isTrustedPluginAtURL:NAFileURL(@"/System/Applications/Calculator.app")
                                                     error:&error];
     NAAssertTrue(trusted, @"an Apple-signed bundle should pass: %@", error);
 }
@@ -132,14 +126,13 @@
     [pm registerExtractorClass:[NALibarchiveExtractor class]];
 
     // Use a nonexistent file — no magic bytes to sniff, no extension match.
-    id<NAExtractorPlugin> ext = [pm extractorForFileAtPath:@"/nonexistent/file.xyz"];
+    id<NAExtractorPlugin> ext = [pm extractorForFileAtURL:NAFileURL(@"/nonexistent/file.xyz")];
     NAAssertNil(ext, @"should not find extractor for missing file with unknown extension");
 }
 
 - (void)testNoExtractorWhenEmpty {
     NAPluginManager *pm = [[NAPluginManager alloc] init];
-    id<NAExtractorPlugin> ext = [pm extractorForFileAtPath:
-        [NATestFixtures pathForFixture:@"test.zip"]];
+    id<NAExtractorPlugin> ext = [pm extractorForFileAtURL:[NATestFixtures URLForFixture:@"test.zip"]];
     NAAssertNil(ext, @"should not find extractor with no plugins registered");
 }
 
@@ -152,7 +145,8 @@
     [[NSFileManager defaultManager] createDirectoryAtPath:dir withIntermediateDirectories:YES
                                                attributes:nil error:nil];
 
-    [pm loadPluginsFromDirectories:@[dir, [dir stringByAppendingPathComponent:@"missing"]]];
+    [pm loadPluginsFromDirectoryURLs:@[NAFileURL(dir),
+                                       NAFileURL([dir stringByAppendingPathComponent:@"missing"])]];
 
     [[NSFileManager defaultManager] removeItemAtPath:dir error:nil];
     NAAssertEqual([pm allPluginClasses].count, 0u,
@@ -160,13 +154,13 @@
 }
 
 - (void)testDefaultPluginDirectories {
-    NSArray<NSString *> *dirs = [NAPluginManager defaultPluginDirectories];
+    NSArray<NSURL *> *dirs = [NAPluginManager defaultPluginDirectoryURLs];
     NSString *userDir = [NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory,
                                                              NSUserDomainMask, YES).firstObject
         stringByAppendingPathComponent:@"N2OArchiver/Plugins"];
-    NAAssertTrue([dirs containsObject:NSBundle.mainBundle.builtInPlugInsPath],
+    NAAssertTrue([dirs containsObject:NSBundle.mainBundle.builtInPlugInsURL],
                  @"the app's PlugIns folder should be scanned, got %@", dirs);
-    NAAssertEqualObjects(dirs.lastObject, userDir,
+    NAAssertEqualObjects(dirs.lastObject.path, userDir,
                          @"the user's Application Support folder should be scanned, got %@", dirs);
 }
 

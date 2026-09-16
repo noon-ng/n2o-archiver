@@ -14,6 +14,11 @@
 
 @implementation NALibarchiveExtractorTests
 
+// The destination directory as a URL, for the extractor API.
+- (NSURL *)destURL {
+    return [NSURL fileURLWithPath:self.destDir isDirectory:YES];
+}
+
 - (void)setUp {
     [super setUp];
     self.extractor = [[NALibarchiveExtractor alloc] init];
@@ -72,7 +77,7 @@
     [[NSFileManager defaultManager] copyItemAtPath:[NATestFixtures pathForFixture:@"disk-image.dmg"]
                                             toPath:renamed error:nil];
     NSError *error = nil;
-    BOOL ok = [self.extractor extractArchiveAtPath:renamed toDestination:self.destDir
+    BOOL ok = [self.extractor extractArchiveAtURL:NAFileURL(renamed) toDestinationURL:self.destURL
                                           progress:[NSProgress discreteProgressWithTotalUnitCount:0] error:&error];
     [[NSFileManager defaultManager] removeItemAtPath:renamed error:nil];
     NAAssertFalse(ok, @"a disk image named .rar should not be extracted");
@@ -90,7 +95,7 @@
 - (void)testListContents {
     NSString *path = [NATestFixtures pathForFixture:@"test.zip"];
     NSError *error = nil;
-    NSArray<NSString *> *entries = [self.extractor contentsOfArchiveAtPath:path
+    NSArray<NSString *> *entries = [self.extractor contentsOfArchiveAtURL:NAFileURL(path)
                                                                     error:&error];
     NAAssertNil(error, @"listing should not error");
     NAAssertNotNil(entries, @"entries should not be nil");
@@ -110,8 +115,8 @@
     }];
 
     NSError *error = nil;
-    BOOL ok = [self.extractor extractArchiveAtPath:path
-                                     toDestination:self.destDir
+    BOOL ok = [self.extractor extractArchiveAtURL:NAFileURL(path)
+                                     toDestinationURL:self.destURL
                                           progress:progress
                                              error:&error];
 
@@ -126,20 +131,18 @@
 #pragma mark - canHandleFile
 
 - (void)testCanHandleValidArchive {
-    NAAssertTrue([NALibarchiveExtractor canHandleFileAtPath:
-                  [NATestFixtures pathForFixture:@"test.zip"]]);
+    NAAssertTrue([NALibarchiveExtractor canHandleFileAtURL:[NATestFixtures URLForFixture:@"test.zip"]]);
 }
 
 - (void)testCanHandleRejectsCorrupt {
-    NAAssertFalse([NALibarchiveExtractor canHandleFileAtPath:
-                   [NATestFixtures pathForFixture:@"corrupt.zip"]]);
+    NAAssertFalse([NALibarchiveExtractor canHandleFileAtURL:[NATestFixtures URLForFixture:@"corrupt.zip"]]);
 }
 
 - (void)testCanHandleRejectsPlainText {
     NSString *path = [NATestFixtures pathForFixture:@"notes.txt"];
     [@"hello\n" writeToFile:path atomically:NO
                   encoding:NSUTF8StringEncoding error:nil];
-    NAAssertFalse([NALibarchiveExtractor canHandleFileAtPath:path],
+    NAAssertFalse([NALibarchiveExtractor canHandleFileAtURL:NAFileURL(path)],
                   @"plain text should not be accepted (libarchive reads it as mtree)");
     [[NSFileManager defaultManager] removeItemAtPath:path error:nil];
 }
@@ -147,14 +150,13 @@
 - (void)testCanHandleRejectsEmptyFile {
     NSString *path = [NATestFixtures pathForFixture:@"empty.bin"];
     [[NSData data] writeToFile:path atomically:NO];
-    NAAssertFalse([NALibarchiveExtractor canHandleFileAtPath:path],
+    NAAssertFalse([NALibarchiveExtractor canHandleFileAtURL:NAFileURL(path)],
                   @"zero-byte file should not be accepted");
     [[NSFileManager defaultManager] removeItemAtPath:path error:nil];
 }
 
 - (void)testCanHandleRejectsMissing {
-    NAAssertFalse([NALibarchiveExtractor canHandleFileAtPath:
-                   @"/nonexistent/file.zip"]);
+    NAAssertFalse([NALibarchiveExtractor canHandleFileAtURL:NAFileURL(@"/nonexistent/file.zip")]);
 }
 
 #pragma mark - Single compressed files
@@ -172,8 +174,7 @@
 }
 
 - (void)testCanHandleSingleCompressedFile {
-    NAAssertTrue([NALibarchiveExtractor canHandleFileAtPath:
-                  [NATestFixtures pathForFixture:@"plain.txt.gz"]],
+    NAAssertTrue([NALibarchiveExtractor canHandleFileAtURL:[NATestFixtures URLForFixture:@"plain.txt.gz"]],
                  @"a gzip-compressed text file should be accepted");
 }
 
@@ -181,8 +182,8 @@
     NSString *path = [NATestFixtures pathForFixture:@"notes.zip"];
     [@"hello\n" writeToFile:path atomically:NO encoding:NSUTF8StringEncoding error:nil];
     NSError *error = nil;
-    BOOL ok = [self.extractor extractArchiveAtPath:path
-                                     toDestination:self.destDir
+    BOOL ok = [self.extractor extractArchiveAtURL:NAFileURL(path)
+                                     toDestinationURL:self.destURL
                                           progress:[NSProgress discreteProgressWithTotalUnitCount:0]
                                              error:&error];
     [[NSFileManager defaultManager] removeItemAtPath:path error:nil];
@@ -194,8 +195,8 @@
 
 - (void)assertExtractsSingleCompressedFixture:(NSString *)name {
     NSError *error = nil;
-    BOOL ok = [self.extractor extractArchiveAtPath:[NATestFixtures pathForFixture:name]
-                                     toDestination:self.destDir
+    BOOL ok = [self.extractor extractArchiveAtURL:[NATestFixtures URLForFixture:name]
+                                     toDestinationURL:self.destURL
                                           progress:[NSProgress discreteProgressWithTotalUnitCount:0]
                                              error:&error];
     NAAssertTrue(ok, @"%@ should extract: %@", name, error.localizedDescription);
@@ -217,8 +218,8 @@
         [fractions addObject:@(fraction)];
     }];
     NSError *error = nil;
-    BOOL ok = [self.extractor extractArchiveAtPath:[NATestFixtures pathForFixture:@"test.tar.gz"]
-                                     toDestination:self.destDir
+    BOOL ok = [self.extractor extractArchiveAtURL:[NATestFixtures URLForFixture:@"test.tar.gz"]
+                                     toDestinationURL:self.destURL
                                           progress:progress
                                              error:&error];
     NAAssertTrue(ok, @"extraction should succeed: %@", error.localizedDescription);
@@ -284,7 +285,7 @@
     [[NSFileManager defaultManager] createDirectoryAtPath:out withIntermediateDirectories:YES
                                                attributes:nil error:nil];
     NSError *error = nil;
-    BOOL ok = [self.extractor extractArchiveAtPath:archive toDestination:out
+    BOOL ok = [self.extractor extractArchiveAtURL:NAFileURL(archive) toDestinationURL:NAFileURL(out)
                                           progress:[NSProgress discreteProgressWithTotalUnitCount:0] error:&error];
     NAAssertTrue(ok, @"extraction should succeed: %@", error.localizedDescription);
     NAAssertTrue(([self modeAt:out relative:@"setuid.bin"] & (S_ISUID | S_ISGID)) == 0,
@@ -319,8 +320,8 @@
     [[NSFileManager defaultManager] createDirectoryAtPath:out withIntermediateDirectories:YES
                                                attributes:nil error:nil];
     NSError *error = nil;
-    BOOL ok = [self.extractor extractArchiveAtPath:[NATestFixtures pathForFixture:fixture]
-                                     toDestination:out
+    BOOL ok = [self.extractor extractArchiveAtURL:[NATestFixtures URLForFixture:fixture]
+                                     toDestinationURL:NAFileURL(out)
                                           progress:[NSProgress discreteProgressWithTotalUnitCount:0]
                                              error:&error];
     NAAssertTrue(ok, @"%@ should extract: %@", fixture, error.localizedDescription);
@@ -338,8 +339,8 @@
 
 - (void)testNonASCIIEntryNamesAreExtracted {
     NSError *error = nil;
-    BOOL ok = [self.extractor extractArchiveAtPath:[NATestFixtures pathForFixture:@"non-ascii-names.tar"]
-                                     toDestination:self.destDir
+    BOOL ok = [self.extractor extractArchiveAtURL:[NATestFixtures URLForFixture:@"non-ascii-names.tar"]
+                                     toDestinationURL:self.destURL
                                           progress:[NSProgress discreteProgressWithTotalUnitCount:0]
                                              error:&error];
     NAAssertTrue(ok, @"extraction should succeed: %@", error.localizedDescription);
@@ -352,11 +353,11 @@
 
 - (void)testArchiveWithoutEntriesIsNotClaimedOrExtracted {
     NSString *path = [NATestFixtures pathForFixture:@"zero-blocks.zip"];
-    NAAssertFalse([NALibarchiveExtractor canHandleFileAtPath:path],
+    NAAssertFalse([NALibarchiveExtractor canHandleFileAtURL:NAFileURL(path)],
                   @"1024 zero bytes have no entry and should not be claimed");
 
     NSError *error = nil;
-    BOOL ok = [self.extractor extractArchiveAtPath:path toDestination:self.destDir
+    BOOL ok = [self.extractor extractArchiveAtURL:NAFileURL(path) toDestinationURL:self.destURL
                                           progress:[NSProgress discreteProgressWithTotalUnitCount:0] error:&error];
     NAAssertFalse(ok, @"an archive without entries should not report success");
     NAAssertTrue([error.localizedDescription containsString:@"no files"],
@@ -366,8 +367,8 @@
 
 - (void)testDamagedHeaderReportsFailure {
     NSError *error = nil;
-    BOOL ok = [self.extractor extractArchiveAtPath:[NATestFixtures pathForFixture:@"damaged-header.tar"]
-                                     toDestination:self.destDir
+    BOOL ok = [self.extractor extractArchiveAtURL:[NATestFixtures URLForFixture:@"damaged-header.tar"]
+                                     toDestinationURL:self.destURL
                                           progress:[NSProgress discreteProgressWithTotalUnitCount:0]
                                              error:&error];
     NAAssertFalse(ok, @"a damaged header after the first entry should not report success");
@@ -385,8 +386,8 @@
         [progress cancel];
     }];
     NSError *error = nil;
-    BOOL ok = [self.extractor extractArchiveAtPath:path
-                                     toDestination:self.destDir
+    BOOL ok = [self.extractor extractArchiveAtURL:NAFileURL(path)
+                                     toDestinationURL:self.destURL
                                           progress:progress
                                              error:&error];
     NAAssertFalse(ok, @"cancelled extraction should return NO");
@@ -403,8 +404,8 @@
 - (void)testExtractCorruptArchiveFails {
     NSString *path = [NATestFixtures pathForFixture:@"corrupt.zip"];
     NSError *error = nil;
-    BOOL ok = [self.extractor extractArchiveAtPath:path
-                                     toDestination:self.destDir
+    BOOL ok = [self.extractor extractArchiveAtURL:NAFileURL(path)
+                                     toDestinationURL:self.destURL
                                           progress:[NSProgress discreteProgressWithTotalUnitCount:0]
                                              error:&error];
     NAAssertFalse(ok, @"corrupt archive should fail");
@@ -413,8 +414,8 @@
 
 - (void)testExtractMissingFileFails {
     NSError *error = nil;
-    BOOL ok = [self.extractor extractArchiveAtPath:@"/nonexistent/file.zip"
-                                     toDestination:self.destDir
+    BOOL ok = [self.extractor extractArchiveAtURL:NAFileURL(@"/nonexistent/file.zip")
+                                     toDestinationURL:self.destURL
                                           progress:[NSProgress discreteProgressWithTotalUnitCount:0]
                                              error:&error];
     NAAssertFalse(ok, @"missing file should fail");
@@ -490,8 +491,8 @@
                  @"fixture %@ should exist", name);
 
     NSError *error = nil;
-    BOOL ok = [self.extractor extractArchiveAtPath:path
-                                     toDestination:self.destDir
+    BOOL ok = [self.extractor extractArchiveAtURL:NAFileURL(path)
+                                     toDestinationURL:self.destURL
                                           progress:[NSProgress discreteProgressWithTotalUnitCount:0]
                                              error:&error];
     NAAssertTrue(ok, @"extraction of %@ should succeed: %@", name,
@@ -513,8 +514,8 @@
     [[NSFileManager defaultManager] createDirectoryAtPath:out
                               withIntermediateDirectories:YES
                                                attributes:nil error:nil];
-    return [self.extractor extractArchiveAtPath:[NATestFixtures pathForFixture:name]
-                                  toDestination:out
+    return [self.extractor extractArchiveAtURL:[NATestFixtures URLForFixture:name]
+                                  toDestinationURL:NAFileURL(out)
                                        progress:[NSProgress discreteProgressWithTotalUnitCount:0]
                                           error:error];
 }

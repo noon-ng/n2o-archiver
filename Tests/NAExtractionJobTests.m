@@ -8,10 +8,10 @@
 
 // Private methods under test.
 @interface NAExtractionJob (Testing)
-- (NSString *)moveStagingDirectory:(NSString *)stagingPath
-           toDestinationForArchive:(NSString *)archivePath
-                             error:(NSError **)error;
-- (void)unwrapSingleItemDirectoryAtPath:(NSString *)destPath;
+- (NSURL *)moveStagingDirectory:(NSURL *)stagingURL
+        toDestinationForArchive:(NSURL *)archiveURL
+                          error:(NSError **)error;
+- (void)unwrapSingleItemDirectoryAtURL:(NSURL *)destinationURL;
 @end
 
 @interface NAExtractionJobTests : NATestCase
@@ -60,7 +60,7 @@ static const char *const kQuarantineValue = "0083;00000000;N2OArchiverTests;";
 
     NAAssertTrue([self waitForJob:job], @"the job should finish");
     NAAssertEqual(job.state, NAExtractionJobStateSucceeded, @"the job should succeed: %@", job.error);
-    NAAssertEqualObjects(job.destinationPath, [self.workDir stringByAppendingPathComponent:@"test"],
+    NAAssertEqualObjects(job.destinationURL.path, [self.workDir stringByAppendingPathComponent:@"test"],
                          @"the output should be named after the archive");
     NAAssertTrue([self fileExists:@"test/a.txt"], @"the single top-level folder should be unwrapped");
     NAAssertEqual([self stagingDirectories].count, 0u, @"no staging directory should remain");
@@ -149,7 +149,7 @@ static const char *const kQuarantineValue = "0083;00000000;N2OArchiverTests;";
 
     NAAssertTrue([self waitForJob:job], @"the job should finish");
     NAAssertEqual(job.state, NAExtractionJobStateFailed, @"the job should fail");
-    NAAssertNil(job.destinationPath, @"no output should be moved into place");
+    NAAssertNil(job.destinationURL, @"no output should be moved into place");
     NAAssertFalse([self fileExists:@"fail-partial"], @"a failed extraction should leave no output folder");
     NAAssertEqual([self stagingDirectories].count, 0u,
                   @"the partial output in the staging directory should be removed");
@@ -218,7 +218,7 @@ static const char *const kQuarantineValue = "0083;00000000;N2OArchiverTests;";
     NSString *archive = [self writeFile:@"wait-space.n2oscripted"];
     NAExtractionJob *job = [self jobForArchive:archive];
     __block BOOL low = NO;
-    job.spaceIsLow = ^BOOL(NSString *path) { return low; };
+    job.spaceIsLow = ^BOOL(NSURL *url) { return low; };
     [job start];
 
     NAAssertTrue(NAWaitUntil(^BOOL { return [self stagingDirectories].count == 1; }, 10.0),
@@ -322,12 +322,12 @@ static const char *const kQuarantineValue = "0083;00000000;N2OArchiverTests;";
     [self writeFile:@".n2o-extract-staging/a.txt"];
 
     NSError *error = nil;
-    NSString *dest = [[self jobForArchive:archive]
-        moveStagingDirectory:[self.workDir stringByAppendingPathComponent:@".n2o-extract-staging"]
-     toDestinationForArchive:archive
+    NSURL *dest = [[self jobForArchive:archive]
+        moveStagingDirectory:[self workURL:@".n2o-extract-staging"]
+     toDestinationForArchive:NAFileURL(archive)
                        error:&error];
 
-    NAAssertEqualObjects(dest, [self.workDir stringByAppendingPathComponent:@"test"],
+    NAAssertEqualObjects(dest.path, [self.workDir stringByAppendingPathComponent:@"test"],
                          @"destination should be the archive base name, got %@ (%@)", dest, error);
     NAAssertTrue([self fileExists:@"test/a.txt"], @"staging contents should move");
     NAAssertFalse([self fileExists:@".n2o-extract-staging"], @"staging should be gone");
@@ -338,12 +338,12 @@ static const char *const kQuarantineValue = "0083;00000000;N2OArchiverTests;";
     [self writeFile:@"test/keep.txt"];
     [self writeFile:@".n2o-extract-staging/a.txt"];
 
-    NSString *dest = [[self jobForArchive:archive]
-        moveStagingDirectory:[self.workDir stringByAppendingPathComponent:@".n2o-extract-staging"]
-     toDestinationForArchive:archive
+    NSURL *dest = [[self jobForArchive:archive]
+        moveStagingDirectory:[self workURL:@".n2o-extract-staging"]
+     toDestinationForArchive:NAFileURL(archive)
                        error:nil];
 
-    NAAssertEqualObjects(dest, [self.workDir stringByAppendingPathComponent:@"test 2"],
+    NAAssertEqualObjects(dest.path, [self.workDir stringByAppendingPathComponent:@"test 2"],
                          @"existing directory should not be replaced, got %@", dest);
     NAAssertEqual([[NSFileManager defaultManager]
                       contentsOfDirectoryAtPath:[self.workDir stringByAppendingPathComponent:@"test"]
@@ -355,12 +355,12 @@ static const char *const kQuarantineValue = "0083;00000000;N2OArchiverTests;";
     NSString *archive = [self copyFixture:@"test.zip" to:@"mystery"];
     [self writeFile:@".n2o-extract-staging/a.txt"];
 
-    NSString *dest = [[self jobForArchive:archive]
-        moveStagingDirectory:[self.workDir stringByAppendingPathComponent:@".n2o-extract-staging"]
-     toDestinationForArchive:archive
+    NSURL *dest = [[self jobForArchive:archive]
+        moveStagingDirectory:[self workURL:@".n2o-extract-staging"]
+     toDestinationForArchive:NAFileURL(archive)
                        error:nil];
 
-    NAAssertEqualObjects(dest, [self.workDir stringByAppendingPathComponent:@"mystery 2"],
+    NAAssertEqualObjects(dest.path, [self.workDir stringByAppendingPathComponent:@"mystery 2"],
                          @"archive file itself should not be replaced, got %@", dest);
 }
 
@@ -371,7 +371,7 @@ static const char *const kQuarantineValue = "0083;00000000;N2OArchiverTests;";
     [self writeFile:@"unwrap/inner/a.txt"];
     [self writeFile:@"unwrap/inner/sub/b.txt"];
 
-    [[self unwrapJob] unwrapSingleItemDirectoryAtPath:dest];
+    [[self unwrapJob] unwrapSingleItemDirectoryAtURL:NAFileURL(dest)];
 
     NAAssertTrue([self fileExists:@"unwrap/a.txt"], @"a.txt should move up");
     NAAssertTrue([self fileExists:@"unwrap/sub/b.txt"], @"sub/b.txt should move up");
@@ -382,7 +382,7 @@ static const char *const kQuarantineValue = "0083;00000000;N2OArchiverTests;";
     NSString *dest = [self directory:@"unwrap"];
     [self writeFile:@"unwrap/x/x/important.txt"];
 
-    [[self unwrapJob] unwrapSingleItemDirectoryAtPath:dest];
+    [[self unwrapJob] unwrapSingleItemDirectoryAtURL:NAFileURL(dest)];
 
     NAAssertTrue([self fileExists:@"unwrap/x/important.txt"],
                  @"x/x/important.txt should become x/important.txt");
@@ -396,7 +396,7 @@ static const char *const kQuarantineValue = "0083;00000000;N2OArchiverTests;";
              withDestinationPath:[self.workDir stringByAppendingPathComponent:@"outside"]
                            error:nil];
 
-    [[self unwrapJob] unwrapSingleItemDirectoryAtPath:out];
+    [[self unwrapJob] unwrapSingleItemDirectoryAtURL:NAFileURL(out)];
 
     NAAssertTrue([self fileExists:@"outside/keep.txt"],
                  @"files in the symlinked directory should not be moved");
@@ -409,7 +409,7 @@ static const char *const kQuarantineValue = "0083;00000000;N2OArchiverTests;";
     [self writeFile:@"unwrap/.hidden"];
     [self writeFile:@"unwrap/dir/.hidden"];
 
-    [[self unwrapJob] unwrapSingleItemDirectoryAtPath:dest];
+    [[self unwrapJob] unwrapSingleItemDirectoryAtURL:NAFileURL(dest)];
 
     NAAssertTrue([self fileExists:@"unwrap/.hidden"], @"top-level .hidden should remain");
     NAAssertTrue([self fileExists:@"unwrap/dir/.hidden"], @"dir/.hidden should remain");
@@ -421,7 +421,7 @@ static const char *const kQuarantineValue = "0083;00000000;N2OArchiverTests;";
     [self writeFile:@"unwrap/inner/.DS_Store"];
     [self writeFile:@"unwrap/inner/a.txt"];
 
-    [[self unwrapJob] unwrapSingleItemDirectoryAtPath:dest];
+    [[self unwrapJob] unwrapSingleItemDirectoryAtURL:NAFileURL(dest)];
 
     NAAssertTrue([self fileExists:@"unwrap/inner/.DS_Store"], @"inner/.DS_Store should be restored");
     NAAssertTrue([self fileExists:@"unwrap/inner/a.txt"], @"inner/a.txt should be restored");
@@ -432,7 +432,7 @@ static const char *const kQuarantineValue = "0083;00000000;N2OArchiverTests;";
 #pragma mark - Helpers
 
 - (NAExtractionJob *)jobForArchive:(NSString *)archivePath {
-    return [[NAExtractionJob alloc] initWithArchivePath:archivePath pluginManager:self.pluginManager];
+    return [[NAExtractionJob alloc] initWithArchiveURL:NAFileURL(archivePath) pluginManager:self.pluginManager];
 }
 
 - (NAExtractionJob *)unwrapJob {
@@ -456,6 +456,11 @@ static const char *const kQuarantineValue = "0083;00000000;N2OArchiverTests;";
                               withIntermediateDirectories:YES attributes:nil error:nil];
     [relativePath writeToFile:path atomically:NO encoding:NSUTF8StringEncoding error:nil];
     return path;
+}
+
+// A URL under the test's working directory.
+- (NSURL *)workURL:(NSString *)relativePath {
+    return NAFileURL([self.workDir stringByAppendingPathComponent:relativePath]);
 }
 
 - (NSString *)directory:(NSString *)relativePath {

@@ -9,9 +9,9 @@ NS_ASSUME_NONNULL_BEGIN
 + (NSArray<NSString *> *)supportedExtensions;
 + (NSArray<NSString *> *)supportedUTIs;
 
-+ (BOOL)canHandleFileAtPath:(NSString *)path;
++ (BOOL)canHandleFileAtURL:(NSURL *)url;
 
-/// Extracts the archive into the existing directory destPath.
+/// Extracts the archive into the existing directory destinationURL.
 ///
 /// progress is owned by the caller and may be read from any thread. The
 /// extractor sets its totalUnitCount and completedUnitCount as it works (in
@@ -20,15 +20,15 @@ NS_ASSUME_NONNULL_BEGIN
 /// -[NSProgress cancel], possibly before this call starts: the extractor then
 /// stops and returns NO with NSUserCancelledError in NSCocoaErrorDomain. Files
 /// already written are left for the caller to remove.
-- (BOOL)extractArchiveAtPath:(NSString *)archivePath
-               toDestination:(NSString *)destPath
-                    progress:(NSProgress *)progress
-                       error:(NSError **)error;
+- (BOOL)extractArchiveAtURL:(NSURL *)archiveURL
+           toDestinationURL:(NSURL *)destinationURL
+                   progress:(NSProgress *)progress
+                      error:(NSError **)error;
 
 @optional
 
-- (nullable NSArray<NSString *> *)contentsOfArchiveAtPath:(NSString *)path
-                                                    error:(NSError **)error;
+- (nullable NSArray<NSString *> *)contentsOfArchiveAtURL:(NSURL *)url
+                                                   error:(NSError **)error;
 
 @end
 

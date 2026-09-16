@@ -11,12 +11,12 @@
 
 + (NSArray<NSString *> *)supportedExtensions { return @[@"n2otest"]; }
 + (NSArray<NSString *> *)supportedUTIs { return @[]; }
-+ (BOOL)canHandleFileAtPath:(NSString *)path { return NO; }
++ (BOOL)canHandleFileAtURL:(NSURL *)url { return NO; }
 
-- (BOOL)extractArchiveAtPath:(NSString *)archivePath
-               toDestination:(NSString *)destPath
-                    progress:(NSProgress *)progress
-                       error:(NSError **)error {
+- (BOOL)extractArchiveAtURL:(NSURL *)archiveURL
+           toDestinationURL:(NSURL *)destinationURL
+                   progress:(NSProgress *)progress
+                      error:(NSError **)error {
     return NO;
 }
 

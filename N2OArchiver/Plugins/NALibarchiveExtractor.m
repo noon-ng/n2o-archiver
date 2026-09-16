@@ -73,11 +73,11 @@ static BOOL NAIsUncompressedRaw(struct archive *a) {
     ];
 }
 
-+ (BOOL)canHandleFileAtPath:(NSString *)path {
++ (BOOL)canHandleFileAtURL:(NSURL *)url {
     struct archive *a = NANewArchiveReader();
 
     BOOL result = NO;
-    if (archive_read_open_filename(a, path.fileSystemRepresentation, 10240)
+    if (archive_read_open_filename(a, url.fileSystemRepresentation, 10240)
         == ARCHIVE_OK) {
         // "empty" bids on any zero-byte file and raw on any input, so a
         // successful open alone does not indicate an archive. An archive must
@@ -97,10 +97,10 @@ static BOOL NAIsUncompressedRaw(struct archive *a) {
 
 #pragma mark - NAExtractorPlugin (extraction)
 
-- (BOOL)extractArchiveAtPath:(NSString *)archivePath
-               toDestination:(NSString *)destPath
-                    progress:(NSProgress *)progress
-                       error:(NSError **)error {
+- (BOOL)extractArchiveAtURL:(NSURL *)archiveURL
+           toDestinationURL:(NSURL *)destinationURL
+                   progress:(NSProgress *)progress
+                      error:(NSError **)error {
     struct archive *a = NANewArchiveReader();
     struct archive *ext = archive_write_disk_new();
 
@@ -121,18 +121,18 @@ static BOOL NAIsUncompressedRaw(struct archive *a) {
     // SECURE_SYMLINKS checks every component of the absolute path, so the
     // destination itself must not contain symlinks (e.g. /var -> /private/var).
     char resolvedDest[PATH_MAX];
-    if (!realpath(destPath.fileSystemRepresentation, resolvedDest)) {
+    if (!realpath(destinationURL.fileSystemRepresentation, resolvedDest)) {
         if (error) {
             *error = [NSError errorWithDomain:NSPOSIXErrorDomain
                                          code:errno
-                                     userInfo:@{NSFilePathErrorKey: destPath}];
+                                     userInfo:@{NSURLErrorKey: destinationURL}];
         }
         archive_read_free(a);
         archive_write_free(ext);
         return NO;
     }
 
-    int r = archive_read_open_filename(a, archivePath.fileSystemRepresentation, 10240);
+    int r = archive_read_open_filename(a, archiveURL.fileSystemRepresentation, 10240);
     if (r != ARCHIVE_OK) {
         [self setError:error fromArchive:a code:NALibarchiveErrorOpen];
         archive_read_free(a);
@@ -143,7 +143,8 @@ static BOOL NAIsUncompressedRaw(struct archive *a) {
     // Progress counts bytes of the archive file read so far, which needs no
     // separate pass over the archive.
     struct stat st;
-    progress.totalUnitCount = stat(archivePath.fileSystemRepresentation, &st) == 0 ? st.st_size : 0;
+    progress.totalUnitCount =
+        stat(archiveURL.fileSystemRepresentation, &st) == 0 ? st.st_size : 0;
 
     struct archive_entry *entry;
     BOOL success = YES;
@@ -184,7 +185,7 @@ static BOOL NAIsUncompressedRaw(struct archive *a) {
         // The raw format names its single entry "data"; use the archive's
         // name without its compression extension instead.
         if ((archive_format(a) & ARCHIVE_FORMAT_BASE_MASK) == ARCHIVE_FORMAT_RAW) {
-            NSString *name = archivePath.lastPathComponent.stringByDeletingPathExtension;
+            NSString *name = archiveURL.URLByDeletingPathExtension.lastPathComponent;
             archive_entry_copy_pathname(entry, name.fileSystemRepresentation);
         }
 
@@ -261,11 +262,11 @@ static BOOL NAIsUncompressedRaw(struct archive *a) {
 
 #pragma mark - NAExtractorPlugin (optional: list contents)
 
-- (NSArray<NSString *> *)contentsOfArchiveAtPath:(NSString *)path
-                                           error:(NSError **)error {
+- (NSArray<NSString *> *)contentsOfArchiveAtURL:(NSURL *)url
+                                          error:(NSError **)error {
     struct archive *a = NANewArchiveReader();
 
-    int r = archive_read_open_filename(a, path.fileSystemRepresentation, 10240);
+    int r = archive_read_open_filename(a, url.fileSystemRepresentation, 10240);
     if (r != ARCHIVE_OK) {
         [self setError:error fromArchive:a code:NALibarchiveErrorOpen];
         archive_read_free(a);
@@ -290,7 +291,7 @@ static BOOL NAIsUncompressedRaw(struct archive *a) {
             return nil;
         }
         if ((archive_format(a) & ARCHIVE_FORMAT_BASE_MASK) == ARCHIVE_FORMAT_RAW) {
-            [entries addObject:path.lastPathComponent.stringByDeletingPathExtension];
+            [entries addObject:url.URLByDeletingPathExtension.lastPathComponent];
         } else {
             const char *name = archive_entry_pathname(entry);
             if (name) {

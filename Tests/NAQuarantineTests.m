@@ -1,4 +1,5 @@
 #import "NATestCase.h"
+#import "NATestFixtures.h"
 #import "NAQuarantine.h"
 #include <sys/stat.h>
 #include <sys/xattr.h>
@@ -62,7 +63,7 @@ static const char *const kValue = "0083;00000000;N2OArchiverTests;";
     chmod(readOnlyDir.fileSystemRepresentation, 0555);
 
     NSError *error = nil;
-    BOOL ok = [NAQuarantine copyQuarantineFromPath:archive toTreeAtPath:root error:&error];
+    BOOL ok = [NAQuarantine copyQuarantineFromURL:NAFileURL(archive) toTreeAtURL:NAFileURL(root) error:&error];
     NAAssertTrue(ok, @"quarantine should be copied: %@", error.localizedDescription);
 
     for (NSString *item in @[@"", @"plain.txt", @"sub", @"sub/nested.txt", @"read-only.txt",
@@ -92,7 +93,7 @@ static const char *const kValue = "0083;00000000;N2OArchiverTests;";
         createSymbolicLinkAtPath:[root stringByAppendingPathComponent:@"link"]
              withDestinationPath:outside error:nil];
 
-    [NAQuarantine copyQuarantineFromPath:archive toTreeAtPath:root error:nil];
+    [NAQuarantine copyQuarantineFromURL:NAFileURL(archive) toTreeAtURL:NAFileURL(root) error:nil];
 
     NAAssertTrue([self quarantineAtPath:outside] == nil,
                  @"the symlink target outside the tree should not be marked");
@@ -103,8 +104,8 @@ static const char *const kValue = "0083;00000000;N2OArchiverTests;";
     NSString *file = [self writeFile:@"out/plain.txt"];
 
     NSError *error = nil;
-    BOOL ok = [NAQuarantine copyQuarantineFromPath:archive
-                                      toTreeAtPath:[self.workDir stringByAppendingPathComponent:@"out"]
+    BOOL ok = [NAQuarantine copyQuarantineFromURL:NAFileURL(archive)
+                                      toTreeAtURL:NAFileURL([self.workDir stringByAppendingPathComponent:@"out"])
                                              error:&error];
 
     NAAssertTrue(ok, @"no quarantine on the source is not an error");
@@ -121,7 +122,7 @@ static const char *const kValue = "0083;00000000;N2OArchiverTests;";
     chflags(immutable.fileSystemRepresentation, UF_IMMUTABLE);
 
     NSError *error = nil;
-    BOOL ok = [NAQuarantine copyQuarantineFromPath:archive toTreeAtPath:root error:&error];
+    BOOL ok = [NAQuarantine copyQuarantineFromURL:NAFileURL(archive) toTreeAtURL:NAFileURL(root) error:&error];
 
     NAAssertFalse(ok, @"an item that cannot be marked should be reported");
     NAAssertEqualObjects(error.userInfo[NSFilePathErrorKey], immutable,
@@ -143,7 +144,7 @@ static const char *const kValue = "0083;00000000;N2OArchiverTests;";
     chmod(locked.fileSystemRepresentation, 0000);
 
     NSError *error = nil;
-    BOOL ok = [NAQuarantine copyQuarantineFromPath:archive toTreeAtPath:root error:&error];
+    BOOL ok = [NAQuarantine copyQuarantineFromURL:NAFileURL(archive) toTreeAtURL:NAFileURL(root) error:&error];
 
     NAAssertTrue(ok, @"an unreadable directory should be made listable and marked: %@", error);
     NAAssertEqualObjects([self quarantineAtPath:[locked stringByAppendingPathComponent:@"inside.txt"]],
@@ -161,7 +162,7 @@ static const char *const kValue = "0083;00000000;N2OArchiverTests;";
     chflags(sealed.fileSystemRepresentation, UF_IMMUTABLE);
 
     NSError *error = nil;
-    BOOL ok = [NAQuarantine copyQuarantineFromPath:archive toTreeAtPath:root error:&error];
+    BOOL ok = [NAQuarantine copyQuarantineFromURL:NAFileURL(archive) toTreeAtURL:NAFileURL(root) error:&error];
 
     NAAssertFalse(ok, @"a directory that cannot be listed should be reported, not skipped");
     NAAssertEqualObjects(error.userInfo[NSFilePathErrorKey], sealed,
@@ -188,7 +189,7 @@ static const char *const kValue = "0083;00000000;N2OArchiverTests;";
         }
     }];
     NSError *error = nil;
-    [NAQuarantine copyQuarantineFromPath:archive toTreeAtPath:root error:&error];
+    [NAQuarantine copyQuarantineFromURL:NAFileURL(archive) toTreeAtURL:NAFileURL(root) error:&error];
     [NAQuarantine setWillOpenItemHandler:nil];
 
     NAAssertNil([self quarantineAtPath:outsideFile],
@@ -215,7 +216,7 @@ static const char *const kValue = "0083;00000000;N2OArchiverTests;";
         }
     }];
     NSError *error = nil;
-    [NAQuarantine copyQuarantineFromPath:archive toTreeAtPath:root error:&error];
+    [NAQuarantine copyQuarantineFromURL:NAFileURL(archive) toTreeAtURL:NAFileURL(root) error:&error];
     [NAQuarantine setWillOpenItemHandler:nil];
 
     struct stat st;

@@ -24,18 +24,18 @@ typedef NS_ENUM(NSInteger, NAExtractionJobState) {
 /// main queue.
 @interface NAExtractionJob : NSObject
 
-- (instancetype)initWithArchivePath:(NSString *)archivePath
-                      pluginManager:(NAPluginManager *)pluginManager NS_DESIGNATED_INITIALIZER;
+- (instancetype)initWithArchiveURL:(NSURL *)archiveURL
+                     pluginManager:(NAPluginManager *)pluginManager NS_DESIGNATED_INITIALIZER;
 - (instancetype)init NS_UNAVAILABLE;
 
-@property (nonatomic, readonly, copy) NSString *archivePath;
+@property (nonatomic, readonly, copy) NSURL *archiveURL;
 @property (nonatomic, readonly) NAExtractionJobState state;
 
 /// YES while extracting or cancelling, until cancelled output has been removed.
 @property (nonatomic, readonly, getter=isActive) BOOL active;
 
 /// The visible output directory, set when the job succeeded.
-@property (nonatomic, readonly, copy, nullable) NSString *destinationPath;
+@property (nonatomic, readonly, copy, nullable) NSURL *destinationURL;
 
 /// Failed: why. Succeeded: some items could not be marked as downloaded, or
 /// nil. Cancelled: the reason when the job stopped itself (low free space),
@@ -49,10 +49,10 @@ typedef NS_ENUM(NSInteger, NAExtractionJobState) {
 /// Called once on the main queue when the job reaches a final state.
 @property (nonatomic, copy, nullable) void (^completionHandler)(NAExtractionJob *job);
 
-/// Returns YES when free space on the volume holding path is low. Checked
+/// Returns YES when free space on the volume holding url is low. Checked
 /// every 0.1 s while extracting. Defaults to
 /// statfs with +isFreeSpaceLowWithAvailable:total:; replaceable in tests.
-@property (nonatomic, copy) BOOL (^spaceIsLow)(NSString *path);
+@property (nonatomic, copy) BOOL (^spaceIsLow)(NSURL *url);
 
 /// YES when available bytes are below the smaller of 1 GB and 5% of total.
 + (BOOL)isFreeSpaceLowWithAvailable:(uint64_t)available total:(uint64_t)total;

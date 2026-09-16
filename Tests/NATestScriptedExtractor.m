@@ -7,25 +7,26 @@ dispatch_semaphore_t NAScriptedRelease;
 
 + (NSArray<NSString *> *)supportedExtensions { return @[@"n2oscripted"]; }
 + (NSArray<NSString *> *)supportedUTIs { return @[]; }
-+ (BOOL)canHandleFileAtPath:(NSString *)path {
-    return [path.pathExtension isEqualToString:@"n2oscripted"];
++ (BOOL)canHandleFileAtURL:(NSURL *)url {
+    return [url.pathExtension isEqualToString:@"n2oscripted"];
 }
 
 static NSError *NAScriptedError(NSInteger code, NSDictionary *userInfo) {
     return [NSError errorWithDomain:@"NATestScriptedExtractor" code:code userInfo:userInfo];
 }
 
-- (BOOL)extractArchiveAtPath:(NSString *)archivePath
-               toDestination:(NSString *)destPath
-                    progress:(NSProgress *)progress
-                       error:(NSError **)error {
-    NSString *file = [destPath stringByAppendingPathComponent:@"payload.txt"];
+- (BOOL)extractArchiveAtURL:(NSURL *)archiveURL
+           toDestinationURL:(NSURL *)destinationURL
+                   progress:(NSProgress *)progress
+                      error:(NSError **)error {
+    NSURL *fileURL = [destinationURL URLByAppendingPathComponent:@"payload.txt"];
+    NSString *file = fileURL.path;
     [@"payload" writeToFile:file atomically:NO encoding:NSUTF8StringEncoding error:nil];
-    NSString *name = archivePath.lastPathComponent;
+    NSString *name = archiveURL.lastPathComponent;
 
     if ([name hasPrefix:@"wait"]) {
         progress.totalUnitCount = 2;
-        progress.fileURL = [NSURL fileURLWithPath:file];
+        progress.fileURL = fileURL;
         progress.completedUnitCount = 1;
         for (int i = 0; i < 1000; i++) {
             if (dispatch_semaphore_wait(NAScriptedRelease,

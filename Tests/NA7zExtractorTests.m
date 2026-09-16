@@ -12,6 +12,11 @@
 
 @implementation NA7zExtractorTests
 
+// The destination directory as a URL, for the extractor API.
+- (NSURL *)destURL {
+    return [NSURL fileURLWithPath:self.destDir isDirectory:YES];
+}
+
 - (void)setUp {
     [super setUp];
     self.extractor = [[NA7zExtractor alloc] init];
@@ -97,8 +102,8 @@
                  @"test.7z fixture should exist");
 
     NSError *error = nil;
-    BOOL ok = [self.extractor extractArchiveAtPath:path
-                                      toDestination:self.destDir
+    BOOL ok = [self.extractor extractArchiveAtURL:NAFileURL(path)
+                                      toDestinationURL:self.destURL
                                            progress:[NSProgress discreteProgressWithTotalUnitCount:0]
                                               error:&error];
     NAAssertTrue(ok, @"7z extraction should succeed: %@", error.localizedDescription);
@@ -119,7 +124,7 @@
     if ([self needs7zz]) return;
     NSString *path = [NATestFixtures pathForFixture:@"test.7z"];
     NSError *error = nil;
-    NSArray<NSString *> *entries = [self.extractor contentsOfArchiveAtPath:path
+    NSArray<NSString *> *entries = [self.extractor contentsOfArchiveAtURL:NAFileURL(path)
                                                                     error:&error];
     NAAssertNil(error, @"listing should not error");
     NAAssertNotNil(entries, @"entries should not be nil");
@@ -130,17 +135,15 @@
 #pragma mark - canHandleFile
 
 - (void)testCanHandle7z {
-    NAAssertTrue([NA7zExtractor canHandleFileAtPath:
-                  [NATestFixtures pathForFixture:@"test.7z"]]);
+    NAAssertTrue([NA7zExtractor canHandleFileAtURL:[NATestFixtures URLForFixture:@"test.7z"]]);
 }
 
 - (void)testCanHandleRejectsZip {
-    NAAssertFalse([NA7zExtractor canHandleFileAtPath:
-                   [NATestFixtures pathForFixture:@"test.zip"]]);
+    NAAssertFalse([NA7zExtractor canHandleFileAtURL:[NATestFixtures URLForFixture:@"test.zip"]]);
 }
 
 - (void)testCanHandleRejectsMissing {
-    NAAssertFalse([NA7zExtractor canHandleFileAtPath:@"/nonexistent/file.7z"]);
+    NAAssertFalse([NA7zExtractor canHandleFileAtURL:NAFileURL(@"/nonexistent/file.7z")]);
 }
 
 #pragma mark - Supported extensions
@@ -157,8 +160,8 @@
     if ([self needs7zz]) return;
     NSProgress *progress = [NSProgress discreteProgressWithTotalUnitCount:0];
     NSError *error = nil;
-    BOOL ok = [self.extractor extractArchiveAtPath:[NATestFixtures pathForFixture:@"test.7z"]
-                                     toDestination:self.destDir
+    BOOL ok = [self.extractor extractArchiveAtURL:[NATestFixtures URLForFixture:@"test.7z"]
+                                     toDestinationURL:self.destURL
                                           progress:progress
                                              error:&error];
     NAAssertTrue(ok, @"extraction should succeed: %@", error.localizedDescription);
@@ -200,7 +203,7 @@
     if ([self needs7zz]) return;
     NSString *path = [NATestFixtures pathForFixture:@"test.7z"];
     NSError *error = nil;
-    NSArray<NSString *> *entries = [self.extractor contentsOfArchiveAtPath:path error:&error];
+    NSArray<NSString *> *entries = [self.extractor contentsOfArchiveAtURL:NAFileURL(path) error:&error];
     NSSet *expected = [NSSet setWithObjects:@"src", @"src/subdir", @"src/a.txt", @"src/b.txt", @"src/subdir/c.txt", nil];
     NAAssertEqualObjects([NSSet setWithArray:entries], expected,
                          @"entries should be the archive members only, got %@ (%@)",
@@ -221,8 +224,8 @@
     NSString *previousDir = fm.currentDirectoryPath;
     [fm changeCurrentDirectoryPath:workDir];
     NSError *error = nil;
-    BOOL ok = [self.extractor extractArchiveAtPath:@"-test.7z"
-                                     toDestination:outDir
+    BOOL ok = [self.extractor extractArchiveAtURL:NAFileURL(@"-test.7z")
+                                     toDestinationURL:NAFileURL(outDir)
                                           progress:[NSProgress discreteProgressWithTotalUnitCount:0]
                                              error:&error];
     [fm changeCurrentDirectoryPath:previousDir];
@@ -242,7 +245,7 @@
     dispatch_semaphore_t done = dispatch_semaphore_create(0);
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         NSError *e = nil;
-        ok = [extractor extractArchiveAtPath:path toDestination:dest progress:progress error:&e];
+        ok = [extractor extractArchiveAtURL:NAFileURL(path) toDestinationURL:NAFileURL(dest) progress:progress error:&e];
         error = e;
         dispatch_semaphore_signal(done);
     });
@@ -262,8 +265,7 @@
 - (void)testListEncryptedArchiveFailsWithPasswordError {
     if ([self needs7zz]) return;
     NSError *error = nil;
-    NSArray *entries = [self.extractor contentsOfArchiveAtPath:
-        [NATestFixtures pathForFixture:@"encrypted.7z"] error:&error];
+    NSArray *entries = [self.extractor contentsOfArchiveAtURL:[NATestFixtures URLForFixture:@"encrypted.7z"] error:&error];
     NAAssertNil(entries, @"listing an encrypted archive should fail");
     NAAssertTrue([error.localizedDescription containsString:@"password-protected"],
                  @"error should say the archive is password-protected, got %@",
@@ -273,8 +275,8 @@
 - (void)testToolFailureKeepsStandardErrorAsFailureReason {
     if ([self needs7zz]) return;
     NSError *error = nil;
-    BOOL ok = [self.extractor extractArchiveAtPath:@"/nonexistent/file.7z"
-                                     toDestination:self.destDir
+    BOOL ok = [self.extractor extractArchiveAtURL:NAFileURL(@"/nonexistent/file.7z")
+                                     toDestinationURL:self.destURL
                                           progress:[NSProgress discreteProgressWithTotalUnitCount:0]
                                              error:&error];
     NAAssertFalse(ok, @"a missing archive should fail");
@@ -298,11 +300,11 @@
 
     NAPluginManager *pm = [[NAPluginManager alloc] init];
     [pm registerBuiltinExtractors];
-    id<NAExtractorPlugin> routed = [pm extractorForFileAtPath:renamed];
+    id<NAExtractorPlugin> routed = [pm extractorForFileAtURL:NAFileURL(renamed)];
 
     NSError *error = nil;
-    BOOL ok = [routed extractArchiveAtPath:renamed
-                             toDestination:self.destDir
+    BOOL ok = [routed extractArchiveAtURL:NAFileURL(renamed)
+                             toDestinationURL:self.destURL
                                   progress:[NSProgress discreteProgressWithTotalUnitCount:0]
                                      error:&error];
     [[NSFileManager defaultManager] removeItemAtPath:renamed error:nil];
@@ -321,8 +323,8 @@
     NSProgress *progress = [NSProgress discreteProgressWithTotalUnitCount:0];
     [progress cancel];
     NSError *error = nil;
-    BOOL ok = [self.extractor extractArchiveAtPath:[NATestFixtures pathForFixture:@"test.7z"]
-                                     toDestination:self.destDir
+    BOOL ok = [self.extractor extractArchiveAtURL:[NATestFixtures URLForFixture:@"test.7z"]
+                                     toDestinationURL:self.destURL
                                           progress:progress
                                              error:&error];
     NAAssertFalse(ok, @"cancelled extraction should return NO");
@@ -339,8 +341,8 @@
 - (void)testExtractMissingFileFails {
     if ([self needs7zz]) return;
     NSError *error = nil;
-    BOOL ok = [self.extractor extractArchiveAtPath:@"/nonexistent/file.7z"
-                                      toDestination:self.destDir
+    BOOL ok = [self.extractor extractArchiveAtURL:NAFileURL(@"/nonexistent/file.7z")
+                                      toDestinationURL:self.destURL
                                            progress:[NSProgress discreteProgressWithTotalUnitCount:0]
                                               error:&error];
     NAAssertFalse(ok, @"missing file should fail");

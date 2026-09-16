@@ -20,16 +20,16 @@ static void (^NAWillOpenItemHandler)(NSString *path);
     NAWillOpenItemHandler = [handler copy];
 }
 
-+ (BOOL)copyQuarantineFromPath:(NSString *)sourcePath
-                  toTreeAtPath:(NSString *)rootPath
-                         error:(NSError **)error {
-    NSData *value = [self quarantineValueAtPath:sourcePath];
++ (BOOL)copyQuarantineFromURL:(NSURL *)sourceURL
+                  toTreeAtURL:(NSURL *)rootURL
+                        error:(NSError **)error {
+    NSData *value = [self quarantineValueAtPath:sourceURL.path];
     if (!value) return YES;
 
     NSMutableArray<NSString *> *failed = [NSMutableArray array];
-    [self markItemNamed:rootPath.fileSystemRepresentation
+    [self markItemNamed:rootURL.fileSystemRepresentation
             inDirectory:AT_FDCWD
-                   path:rootPath
+                   path:rootURL.path
                   value:value
                  failed:failed];
 

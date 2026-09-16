@@ -45,7 +45,7 @@
 
 - (void)testWindowIsNamedAfterTheArchive {
     NSString *archive = [self copyFixture:@"test.zip" to:@"holiday photos.zip"];
-    NAExtractionWindowController *wc = [[NAExtractionWindowController alloc] initWithArchivePath:archive];
+    NAExtractionWindowController *wc = [[NAExtractionWindowController alloc] initWithArchiveURL:NAFileURL(archive)];
 
     NAAssertNotNil(wc.window, @"window should be created");
     NAAssertEqualObjects(wc.window.title, @"holiday photos.zip", @"the window should be named after the archive");
@@ -58,8 +58,8 @@
 
 - (void)testConcurrentWindowsAreCascaded {
     NSString *archive = [self copyFixture:@"test.zip" to:@"test.zip"];
-    NAExtractionWindowController *first = [[NAExtractionWindowController alloc] initWithArchivePath:archive];
-    NAExtractionWindowController *second = [[NAExtractionWindowController alloc] initWithArchivePath:archive];
+    NAExtractionWindowController *first = [[NAExtractionWindowController alloc] initWithArchiveURL:NAFileURL(archive)];
+    NAExtractionWindowController *second = [[NAExtractionWindowController alloc] initWithArchiveURL:NAFileURL(archive)];
 
     NAAssertFalse(NSEqualPoints(first.window.frame.origin, second.window.frame.origin),
                   @"a second window should not cover the first, both at %@",
@@ -68,7 +68,7 @@
 
 - (void)testEscapeCancels {
     NSString *archive = [self writeFile:@"wait.n2oscripted"];
-    NAExtractionWindowController *wc = [[NAExtractionWindowController alloc] initWithArchivePath:archive];
+    NAExtractionWindowController *wc = [[NAExtractionWindowController alloc] initWithArchiveURL:NAFileURL(archive)];
     NSButton *cancel = [wc valueForKey:@"cancelButton"];
 
     NAAssertEqualObjects(cancel.keyEquivalent, @"\e", @"Esc should work the Cancel button");
@@ -88,9 +88,9 @@
 
 - (void)testBeginExtractionCreatesOutputAndClosesWindow {
     NSString *archive = [self copyFixture:@"test.zip" to:@"test.zip"];
-    NAExtractionWindowController *wc = [[NAExtractionWindowController alloc] initWithArchivePath:archive];
-    NSMutableArray<NSString *> *revealed = [NSMutableArray array];
-    wc.revealHandler = ^(NSString *path) { [revealed addObject:path]; };
+    NAExtractionWindowController *wc = [[NAExtractionWindowController alloc] initWithArchiveURL:NAFileURL(archive)];
+    NSMutableArray<NSURL *> *revealed = [NSMutableArray array];
+    wc.revealHandler = ^(NSURL *url) { [revealed addObject:url]; };
 
     [wc beginExtraction];
     NAAssertTrue(wc.window.isVisible, @"the window should be shown while extracting");
@@ -100,7 +100,8 @@
     NAAssertTrue([self fileExists:@"test/a.txt"], @"extraction should create the output directory");
     NAAssertEqualObjects([[wc valueForKey:@"statusLabel"] stringValue], @"Done.",
                          @"the status should say the extraction is done");
-    NAAssertEqualObjects(revealed, @[[self.workDir stringByAppendingPathComponent:@"test"]],
+    NAAssertEqualObjects([revealed valueForKey:@"path"],
+                         @[[self.workDir stringByAppendingPathComponent:@"test"]],
                          @"the output folder should be revealed");
     NAAssertTrue(NAWaitUntil(^BOOL { return !wc.window.isVisible; }, 10.0),
                  @"the window should close after a successful extraction");
@@ -110,7 +111,7 @@
 
 - (void)testCancelKeepsWindowOpenUntilExtractionReturns {
     NSString *archive = [self writeFile:@"wait.n2oscripted"];
-    NAExtractionWindowController *wc = [[NAExtractionWindowController alloc] initWithArchivePath:archive];
+    NAExtractionWindowController *wc = [[NAExtractionWindowController alloc] initWithArchiveURL:NAFileURL(archive)];
 
     [wc beginExtraction];
     [wc cancelExtraction:nil];
@@ -130,7 +131,7 @@
 
 - (void)testClosingWindowDuringExtractionCancels {
     NSString *archive = [self writeFile:@"wait.n2oscripted"];
-    NAExtractionWindowController *wc = [[NAExtractionWindowController alloc] initWithArchivePath:archive];
+    NAExtractionWindowController *wc = [[NAExtractionWindowController alloc] initWithArchiveURL:NAFileURL(archive)];
 
     [wc beginExtraction];
     NAAssertFalse([wc windowShouldClose:wc.window], @"window should not close while extracting");
@@ -143,11 +144,11 @@
 
 - (void)testLowFreeSpaceStopIsShownAsError {
     NSString *archive = [self writeFile:@"wait-space.n2oscripted"];
-    NAExtractionWindowController *wc = [[NAExtractionWindowController alloc] initWithArchivePath:archive];
+    NAExtractionWindowController *wc = [[NAExtractionWindowController alloc] initWithArchiveURL:NAFileURL(archive)];
 
     [wc beginExtraction];
     NAExtractionJob *job = [wc valueForKey:@"job"];
-    job.spaceIsLow = ^BOOL(NSString *path) { return YES; };
+    job.spaceIsLow = ^BOOL(NSURL *url) { return YES; };
     NAAssertTrue(NAWaitUntil(^BOOL { return job.state == NAExtractionJobStateCancelling; }, 10.0),
                  @"low free space should stop the extraction");
     dispatch_semaphore_signal(NAScriptedRelease);
@@ -164,7 +165,7 @@
 
 - (void)testUnsupportedFormatShowsError {
     NSString *archive = [self writeFile:@"notes.txt"];
-    NAExtractionWindowController *wc = [[NAExtractionWindowController alloc] initWithArchivePath:archive];
+    NAExtractionWindowController *wc = [[NAExtractionWindowController alloc] initWithArchiveURL:NAFileURL(archive)];
 
     [wc beginExtraction];
     NAAssertFalse(wc.isWorking, @"an unrecognized file should not start an extraction");
@@ -180,7 +181,7 @@
 
 - (void)testErrorIsPresentedAsSheetWithDetails {
     NSString *archive = [self copyFixture:@"corrupt.zip" to:@"broken.zip"];
-    NAExtractionWindowController *wc = [[NAExtractionWindowController alloc] initWithArchivePath:archive];
+    NAExtractionWindowController *wc = [[NAExtractionWindowController alloc] initWithArchiveURL:NAFileURL(archive)];
 
     [wc beginExtraction];
     NAAssertTrue(NAWaitUntil(^BOOL { return !wc.isWorking && wc.window.attachedSheet != nil; }, 10.0),
@@ -197,8 +198,8 @@
 
 - (void)testQuarantineFailureAfterSuccessHasItsOwnTitle {
     NSString *archive = [self copyFixture:@"test.zip" to:@"test.zip"];
-    NAExtractionWindowController *wc = [[NAExtractionWindowController alloc] initWithArchivePath:archive];
-    NAExtractionJob *job = [[NAExtractionJob alloc] initWithArchivePath:archive
+    NAExtractionWindowController *wc = [[NAExtractionWindowController alloc] initWithArchiveURL:NAFileURL(archive)];
+    NAExtractionJob *job = [[NAExtractionJob alloc] initWithArchiveURL:NAFileURL(archive)
                                                           pluginManager:[NAPluginManager sharedManager]];
     [job setValue:@(NAExtractionJobStateSucceeded) forKey:@"state"];
     [job setValue:[NSError errorWithDomain:NSCocoaErrorDomain code:NSFileWriteUnknownError
@@ -216,7 +217,7 @@
 
 - (void)testLongErrorDetailsAreCollapsedAndScrollable {
     NSString *archive = [self writeFile:@"long-error.n2oscripted"];
-    NAExtractionWindowController *wc = [[NAExtractionWindowController alloc] initWithArchivePath:archive];
+    NAExtractionWindowController *wc = [[NAExtractionWindowController alloc] initWithArchiveURL:NAFileURL(archive)];
 
     [wc beginExtraction];
     NAAssertTrue(NAWaitUntil(^BOOL { return !wc.isWorking && wc.window.attachedSheet != nil; }, 10.0),

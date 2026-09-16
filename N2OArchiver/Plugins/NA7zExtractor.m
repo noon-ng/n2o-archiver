@@ -16,7 +16,7 @@ static const uint8_t k7zSignature[] = {'7', 'z', 0xBC, 0xAF, 0x27, 0x1C};
     return @[[NSData dataWithBytes:k7zSignature length:sizeof(k7zSignature)]];
 }
 
-+ (NSString *)formatTypeForFileAtPath:(NSString *)path {
++ (NSString *)formatTypeForFileAtURL:(NSURL *)url {
     return @"7z";
 }
 

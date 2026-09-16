@@ -38,32 +38,33 @@
     [self registerExtractorClass:[NALibarchiveExtractor class]];
 }
 
-- (void)loadPluginsFromDirectories:(NSArray<NSString *> *)directories {
-    for (NSString *dir in directories) {
-        NSArray<NSString *> *contents =
-            [[NSFileManager defaultManager] contentsOfDirectoryAtPath:dir
-                                                               error:nil];
-        for (NSString *item in contents) {
-            if (![item.pathExtension isEqualToString:@"bundle"]) continue;
-
-            NSString *fullPath = [dir stringByAppendingPathComponent:item];
+- (void)loadPluginsFromDirectoryURLs:(NSArray<NSURL *> *)directoryURLs {
+    for (NSURL *directoryURL in directoryURLs) {
+        NSArray<NSURL *> *contents =
+            [[NSFileManager defaultManager] contentsOfDirectoryAtURL:directoryURL
+                                         includingPropertiesForKeys:nil
+                                                            options:0
+                                                              error:nil];
+        for (NSURL *bundleURL in contents) {
+            if (![bundleURL.pathExtension isEqualToString:@"bundle"]) continue;
 
             // Any process running as the user can write to the Application
             // Support folder, so a bundle is loaded only if Apple issued the
             // certificate that signed it.
             NSError *trustError = nil;
-            if (![NAPluginManager isTrustedPluginAtPath:fullPath error:&trustError]) {
+            if (![NAPluginManager isTrustedPluginAtURL:bundleURL error:&trustError]) {
                 os_log_error(NALog(), "not loading plugin without a valid Apple-issued "
                              "signature: %{private}@ (%{public}@)",
-                             fullPath, trustError.localizedDescription);
+                             bundleURL.path, trustError.localizedDescription);
                 continue;
             }
 
-            NSBundle *pluginBundle = [NSBundle bundleWithPath:fullPath];
+            NSBundle *pluginBundle = [NSBundle bundleWithURL:bundleURL];
             if (!pluginBundle) continue;
 
             if (![pluginBundle load]) {
-                os_log_error(NALog(), "failed to load plugin bundle: %{private}@", fullPath);
+                os_log_error(NALog(), "failed to load plugin bundle: %{private}@",
+                             bundleURL.path);
                 continue;
             }
 
@@ -71,24 +72,24 @@
             if (!principalClass ||
                 ![principalClass conformsToProtocol:@protocol(NAExtractorPlugin)]) {
                 os_log_error(NALog(), "plugin principal class does not conform to "
-                             "NAExtractorPlugin: %{private}@", fullPath);
+                             "NAExtractorPlugin: %{private}@", bundleURL.path);
                 continue;
             }
 
             [self registerExtractorClass:(Class<NAExtractorPlugin>)principalClass];
             os_log(NALog(), "loaded plugin: %{public}@ (%{public}@)",
-                   item, NSStringFromClass(principalClass));
+                   bundleURL.lastPathComponent, NSStringFromClass(principalClass));
         }
     }
 }
 
-+ (BOOL)isTrustedPluginAtPath:(NSString *)path error:(NSError **)error {
++ (BOOL)isTrustedPluginAtURL:(NSURL *)url error:(NSError **)error {
     SecStaticCodeRef code = NULL;
     SecRequirementRef requirement = NULL;
     CFErrorRef cfError = NULL;
 
-    OSStatus status = SecStaticCodeCreateWithPath(
-        (__bridge CFURLRef)[NSURL fileURLWithPath:path], kSecCSDefaultFlags, &code);
+    OSStatus status = SecStaticCodeCreateWithPath((__bridge CFURLRef)url,
+                                                  kSecCSDefaultFlags, &code);
     if (status == errSecSuccess) {
         // Developer ID and App Store certificates chain to Apple's root CA.
         status = SecRequirementCreateWithString(CFSTR("anchor apple generic"),
@@ -113,16 +114,16 @@
     return NO;
 }
 
-- (nullable id<NAExtractorPlugin>)extractorForFileAtPath:(NSString *)path {
+- (nullable id<NAExtractorPlugin>)extractorForFileAtURL:(NSURL *)url {
     // First pass: ask each plugin to sniff the file (magic bytes).
     for (Class cls in self.pluginClasses) {
-        if ([cls canHandleFileAtPath:path]) {
+        if ([cls canHandleFileAtURL:url]) {
             return [[(Class)cls alloc] init];
         }
     }
 
     // Second pass: match by file extension.
-    NSString *ext = path.pathExtension.lowercaseString;
+    NSString *ext = url.pathExtension.lowercaseString;
     if (ext.length == 0) return nil;
 
     for (Class cls in self.pluginClasses) {
@@ -143,25 +144,25 @@
 
 #pragma mark - Private
 
-+ (NSArray<NSString *> *)defaultPluginDirectories {
-    NSMutableArray<NSString *> *paths = [NSMutableArray array];
++ (NSArray<NSURL *> *)defaultPluginDirectoryURLs {
+    NSMutableArray<NSURL *> *urls = [NSMutableArray array];
 
     // Built-in plugins inside the app bundle.
-    NSString *builtIn = [NSBundle.mainBundle builtInPlugInsPath];
-    if (builtIn) [paths addObject:builtIn];
+    NSURL *builtIn = NSBundle.mainBundle.builtInPlugInsURL;
+    if (builtIn) [urls addObject:builtIn];
 
     // User-installed plugins.
-    NSArray<NSString *> *appSupport =
-        NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory,
-                                            NSUserDomainMask, YES);
-    if (appSupport.count > 0) {
-        NSString *userPlugins =
-            [appSupport[0] stringByAppendingPathComponent:
-                @"N2OArchiver/Plugins"];
-        [paths addObject:userPlugins];
+    NSURL *appSupport = [[NSFileManager defaultManager] URLForDirectory:NSApplicationSupportDirectory
+                                                               inDomain:NSUserDomainMask
+                                                      appropriateForURL:nil
+                                                                 create:NO
+                                                                  error:nil];
+    if (appSupport) {
+        [urls addObject:[appSupport URLByAppendingPathComponent:@"N2OArchiver/Plugins"
+                                                    isDirectory:YES]];
     }
 
-    return paths;
+    return urls;
 }
 
 @end

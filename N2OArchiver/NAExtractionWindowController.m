@@ -3,7 +3,7 @@
 #import "NAPluginManager.h"
 
 @interface NAExtractionWindowController () <NSWindowDelegate>
-@property (nonatomic, copy) NSString *archivePath;
+@property (nonatomic, copy) NSURL *archiveURL;
 @property (nonatomic, strong, nullable) NAExtractionJob *job;
 @property (nonatomic, strong) NSProgressIndicator *progressBar;
 @property (nonatomic, strong) NSTextField *filenameLabel;
@@ -19,22 +19,21 @@
 
 @implementation NAExtractionWindowController
 
-- (instancetype)initWithArchivePath:(NSString *)archivePath {
+- (instancetype)initWithArchiveURL:(NSURL *)archiveURL {
     NSWindow *window = [self createWindow];
     self = [super initWithWindow:window];
     if (self) {
-        _archivePath = [archivePath copy];
-        _revealHandler = ^(NSString *path) {
+        _archiveURL = [archiveURL copy];
+        _revealHandler = ^(NSURL *url) {
             // Selects the output folder in its parent, rather than opening it.
-            [[NSWorkspace sharedWorkspace] activateFileViewerSelectingURLs:
-                @[[NSURL fileURLWithPath:path isDirectory:YES]]];
+            [[NSWorkspace sharedWorkspace] activateFileViewerSelectingURLs:@[url]];
         };
         window.delegate = self;
-        window.title = archivePath.lastPathComponent;
+        window.title = archiveURL.lastPathComponent;
         // Gives the window the archive's proxy icon in its title bar.
-        window.representedURL = [NSURL fileURLWithPath:archivePath];
+        window.representedURL = archiveURL;
         [self setupUI];
-        self.filenameLabel.stringValue = archivePath.lastPathComponent;
+        self.filenameLabel.stringValue = archiveURL.lastPathComponent;
     }
     return self;
 }
@@ -46,8 +45,9 @@
     self.progressBar.doubleValue = 0.0;
     self.statusLabel.stringValue = @"Extracting…";
 
-    NAExtractionJob *job = [[NAExtractionJob alloc] initWithArchivePath:self.archivePath
-                                                          pluginManager:[NAPluginManager sharedManager]];
+    NAExtractionJob *job =
+        [[NAExtractionJob alloc] initWithArchiveURL:self.archiveURL
+                                      pluginManager:[NAPluginManager sharedManager]];
     __weak typeof(self) weakSelf = self;
     job.progressHandler = ^(double fraction, NSString *entry) {
         weakSelf.progressBar.doubleValue = fraction * 100.0;
@@ -73,9 +73,9 @@
                 [self presentError:job.error
                              title:[NSString stringWithFormat:
                     @"“%@” was extracted, but some files are not marked as downloaded.",
-                    self.archivePath.lastPathComponent]];
+                    self.archiveURL.lastPathComponent]];
             } else {
-                [self extractionFinishedAtPath:job.destinationPath];
+                [self extractionFinishedAtURL:job.destinationURL];
             }
             break;
         case NAExtractionJobStateFailed:
@@ -95,11 +95,11 @@
 
 #pragma mark - Completion
 
-- (void)extractionFinishedAtPath:(NSString *)destPath {
+- (void)extractionFinishedAtURL:(NSURL *)destinationURL {
     self.progressBar.doubleValue = 100.0;
     self.statusLabel.stringValue = @"Done.";
 
-    self.revealHandler(destPath);
+    self.revealHandler(destinationURL);
 
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
@@ -111,7 +111,7 @@
 
 - (NSString *)failureTitle {
     return [NSString stringWithFormat:@"“%@” could not be extracted.",
-            self.archivePath.lastPathComponent];
+            self.archiveURL.lastPathComponent];
 }
 
 // Longer recovery suggestions go into the collapsible details area.

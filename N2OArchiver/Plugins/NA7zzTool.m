@@ -178,22 +178,23 @@ static NSString *const NA7zzMinimumVersion = @"25.01";
     return [version compare:NA7zzMinimumVersion options:NSNumericSearch] != NSOrderedAscending;
 }
 
-+ (BOOL)extractArchiveAtPath:(NSString *)archivePath
-                  formatType:(NSString *)formatType
-               toDestination:(NSString *)destPath
-                    progress:(NSProgress *)progress
-                       error:(NSError **)error {
++ (BOOL)extractArchiveAtURL:(NSURL *)archiveURL
+                 formatType:(NSString *)formatType
+           toDestinationURL:(NSURL *)destinationURL
+                   progress:(NSProgress *)progress
+                      error:(NSError **)error {
     if (progress.isCancelled) {
         [self setCancelledError:error];
         return NO;
     }
 
     progress.totalUnitCount = 100;
-    NSURL *destURL = [NSURL fileURLWithPath:destPath isDirectory:YES];
     NA7zzProgressParser *parser =
         [[NA7zzProgressParser alloc] initWithHandler:^(double fraction, NSString *entry) {
         progress.completedUnitCount = (int64_t)llround(fraction * 100);
-        if (entry.length > 0) progress.fileURL = [destURL URLByAppendingPathComponent:entry];
+        if (entry.length > 0) {
+            progress.fileURL = [destinationURL URLByAppendingPathComponent:entry];
+        }
     }];
     BOOL (^isCancelled)(void) = ^BOOL { return progress.isCancelled; };
 
@@ -203,8 +204,8 @@ static NSString *const NA7zzMinimumVersion = @"25.01";
         // archive fails instead of prompting.
         @"x", @"-y", @"-bsp1", @"-p",
         [@"-t" stringByAppendingString:formatType],
-        [NSString stringWithFormat:@"-o%@", destPath],
-        @"--", archivePath
+        [NSString stringWithFormat:@"-o%@", destinationURL.path],
+        @"--", archiveURL.path
     ];
 
     BOOL cancelled = NO;
@@ -234,14 +235,14 @@ static NSString *const NA7zzMinimumVersion = @"25.01";
     return YES;
 }
 
-+ (nullable NSArray<NSString *> *)contentsOfArchiveAtPath:(NSString *)path
-                                               formatType:(NSString *)formatType
-                                                    error:(NSError **)error {
++ (nullable NSArray<NSString *> *)contentsOfArchiveAtURL:(NSURL *)url
+                                              formatType:(NSString *)formatType
+                                                   error:(NSError **)error {
     NSMutableData *output = [NSMutableData data];
     NSData *stderrData = nil;
     int status = [self runWithArguments:@[@"l", @"-slt", @"-p",
                                           [@"-t" stringByAppendingString:formatType],
-                                          @"--", path]
+                                          @"--", url.path]
                           stdoutHandler:^(NSData *data) { [output appendData:data]; }
                             isCancelled:nil
                               cancelled:NULL

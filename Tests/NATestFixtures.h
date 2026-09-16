@@ -9,5 +9,12 @@
 + (void)tearDown;
 + (NSString *)fixtureDir;
 + (NSString *)pathForFixture:(NSString *)name;
++ (NSURL *)fixtureDirURL;
++ (NSURL *)URLForFixture:(NSString *)name;
 
 @end
+
+/// A file URL for a path, for tests that hold paths.
+static inline NSURL *NAFileURL(NSString *path) {
+    return [NSURL fileURLWithPath:path];
+}

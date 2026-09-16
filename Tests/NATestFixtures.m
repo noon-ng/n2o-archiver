@@ -58,4 +58,12 @@ static NSString *_fixtureDir;
     return @"Tests/Fixtures";
 }
 
++ (NSURL *)fixtureDirURL {
+    return [NSURL fileURLWithPath:[self fixtureDir] isDirectory:YES];
+}
+
++ (NSURL *)URLForFixture:(NSString *)name {
+    return [NSURL fileURLWithPath:[self pathForFixture:name]];
+}
+
 @end

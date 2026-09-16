@@ -13,7 +13,7 @@
 @end
 
 @interface AppDelegateTests : NATestCase
-@property (nonatomic, strong) NSMutableArray<NSString *> *revealed;
+@property (nonatomic, strong) NSMutableArray<NSURL *> *revealed;
 @end
 
 @implementation AppDelegateTests
@@ -22,10 +22,10 @@
 // applicationWillFinishLaunching:. Revealed paths are recorded in revealed.
 - (AppDelegate *)launchedDelegate {
     AppDelegate *delegate = [[AppDelegate alloc] init];
-    delegate.pluginDirectories = @[];
-    NSMutableArray<NSString *> *revealed = [NSMutableArray array];
+    delegate.pluginDirectoryURLs = @[];
+    NSMutableArray<NSURL *> *revealed = [NSMutableArray array];
     self.revealed = revealed;
-    delegate.revealHandler = ^(NSString *path) { [revealed addObject:path]; };
+    delegate.revealHandler = ^(NSURL *url) { [revealed addObject:url]; };
     [delegate applicationWillFinishLaunching:
         [NSNotification notificationWithName:NSApplicationWillFinishLaunchingNotification
                                       object:NSApp]];
@@ -48,7 +48,7 @@
 
     NSString *expectedDir = [[NATestFixtures fixtureDir]
         stringByAppendingPathComponent:@"test"];
-    NAAssertEqualObjects(self.revealed, @[expectedDir],
+    NAAssertEqualObjects([self.revealed valueForKey:@"path"], @[expectedDir],
                          @"the delegate's reveal handler should receive the output folder");
     [[NSFileManager defaultManager] removeItemAtPath:expectedDir error:nil];
 }
@@ -58,8 +58,8 @@
 - (void)testWillFinishLaunchingRegistersPlugins {
     [self launchedDelegate];
 
-    NAAssertEqualObjects([[AppDelegate alloc] init].pluginDirectories,
-                         [NAPluginManager defaultPluginDirectories],
+    NAAssertEqualObjects([[AppDelegate alloc] init].pluginDirectoryURLs,
+                         [NAPluginManager defaultPluginDirectoryURLs],
                          @"a new delegate should scan the default plugin folders");
     NSArray *classes = [[NAPluginManager sharedManager] allPluginClasses];
     NAAssertTrue(classes.count >= 1,
