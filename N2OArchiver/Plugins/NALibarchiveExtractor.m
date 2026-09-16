@@ -35,17 +35,7 @@ static BOOL NAIsUncompressedRaw(struct archive *a) {
         && archive_filter_count(a) <= 1;
 }
 
-@interface NALibarchiveExtractor ()
-@property (atomic, assign) BOOL cancelled;
-@end
-
-@implementation NALibarchiveExtractor {
-    // Progress state for the extraction in progress.
-    NAExtractionProgressBlock _progressBlock;
-    int64_t _archiveSize;
-    double _lastReportedFraction;
-    NSString *_currentEntryName;
-}
+@implementation NALibarchiveExtractor
 
 #pragma mark - NAExtractorPlugin (class methods)
 
@@ -97,7 +87,7 @@ static BOOL NAIsUncompressedRaw(struct archive *a) {
 
 - (BOOL)extractArchiveAtPath:(NSString *)archivePath
                toDestination:(NSString *)destPath
-                    progress:(NAExtractionProgressBlock)progressBlock
+                    progress:(NSProgress *)progress
                        error:(NSError **)error {
     struct archive *a = NANewArchiveReader();
     struct archive *ext = archive_write_disk_new();
@@ -138,13 +128,10 @@ static BOOL NAIsUncompressedRaw(struct archive *a) {
         return NO;
     }
 
-    // Progress is the share of the archive file read so far, which needs no
+    // Progress counts bytes of the archive file read so far, which needs no
     // separate pass over the archive.
     struct stat st;
-    _archiveSize = stat(archivePath.fileSystemRepresentation, &st) == 0 ? st.st_size : 0;
-    _progressBlock = progressBlock;
-    _lastReportedFraction = -1;
-    _currentEntryName = @"";
+    progress.totalUnitCount = stat(archivePath.fileSystemRepresentation, &st) == 0 ? st.st_size : 0;
 
     struct archive_entry *entry;
     BOOL success = YES;
@@ -168,7 +155,7 @@ static BOOL NAIsUncompressedRaw(struct archive *a) {
         }
         entryCount++;
 
-        if (self.cancelled) {
+        if (progress.isCancelled) {
             [self setCancelledError:error];
             success = NO;
             break;
@@ -194,15 +181,15 @@ static BOOL NAIsUncompressedRaw(struct archive *a) {
             success = NO;
             break;
         }
-        _currentEntryName = (entryPath ? [NSString stringWithUTF8String:entryPath] : nil)
-                            .lastPathComponent ?: @"";
-
         archive_entry_set_perm(entry, [self sanitizedPermissionsForEntry:entry]);
 
         // Rewrite the entry pathname, and the hardlink target if any, to be
         // under the destination. Hardlink targets are otherwise resolved
         // against the process working directory.
         [self rebaseEntry:entry underDirectory:resolvedDest];
+        progress.fileURL = [NSURL fileURLWithFileSystemRepresentation:archive_entry_pathname(entry)
+                                                          isDirectory:archive_entry_filetype(entry) == AE_IFDIR
+                                                        relativeToURL:nil];
 
         r = archive_write_header(ext, entry);
         if (r < ARCHIVE_WARN) {
@@ -219,10 +206,10 @@ static BOOL NAIsUncompressedRaw(struct archive *a) {
         // without a stored size (such as raw) or without a file type in their
         // mode. The RAR5 reader fails when asked for a directory's data.
         r = archive_entry_filetype(entry) != AE_IFDIR
-            ? [self copyDataFromArchive:a toWriter:ext]
+            ? [self copyDataFromArchive:a toWriter:ext progress:progress]
             : ARCHIVE_OK;
         if (r != ARCHIVE_OK) {
-            if (self.cancelled) {
+            if (progress.isCancelled) {
                 [self setCancelledError:error];
             } else {
                 [self setError:error fromArchive:a code:2];
@@ -232,12 +219,12 @@ static BOOL NAIsUncompressedRaw(struct archive *a) {
         }
         archive_write_finish_entry(ext);
 
-        [self reportProgressFromArchive:a force:YES];
+        [self reportProgressFromArchive:a progress:progress];
     }
 
     // The cancel may arrive after the last entry; report it so the caller
     // treats the output as cancelled.
-    if (success && self.cancelled) {
+    if (success && progress.isCancelled) {
         [self setCancelledError:error];
         success = NO;
     }
@@ -247,18 +234,13 @@ static BOOL NAIsUncompressedRaw(struct archive *a) {
         success = NO;
     }
 
-    if (success && progressBlock) {
-        progressBlock(1.0, _currentEntryName);
+    if (success) {
+        progress.completedUnitCount = progress.totalUnitCount;
     }
 
-    _progressBlock = nil;
     archive_read_free(a);
     archive_write_free(ext);
     return success;
-}
-
-- (void)cancelExtraction {
-    self.cancelled = YES;
 }
 
 #pragma mark - NAExtractorPlugin (optional: list contents)
@@ -342,13 +324,14 @@ static BOOL NAIsUncompressedRaw(struct archive *a) {
 }
 
 - (int)copyDataFromArchive:(struct archive *)ar
-                  toWriter:(struct archive *)aw {
+                  toWriter:(struct archive *)aw
+                  progress:(NSProgress *)progress {
     const void *buff;
     size_t size;
     la_int64_t offset;
 
     for (;;) {
-        if (self.cancelled) return ARCHIVE_FAILED;
+        if (progress.isCancelled) return ARCHIVE_FAILED;
 
         int r = archive_read_data_block(ar, &buff, &size, &offset);
         if (r == ARCHIVE_EOF) return ARCHIVE_OK;
@@ -360,23 +343,15 @@ static BOOL NAIsUncompressedRaw(struct archive *a) {
             return r;
         }
 
-        [self reportProgressFromArchive:ar force:NO];
+        [self reportProgressFromArchive:ar progress:progress];
     }
 }
 
-// Reports the share of the archive file consumed so far. Within an entry,
-// reports only after at least 1% more has been read, so a large file gives
-// steady updates without one callback per data block.
-- (void)reportProgressFromArchive:(struct archive *)ar force:(BOOL)force {
-    if (!_progressBlock || _archiveSize <= 0) return;
-
-    double fraction = (double)archive_filter_bytes(ar, -1) / (double)_archiveSize;
-    if (fraction > 1.0) fraction = 1.0;
-    if (fraction < _lastReportedFraction) return;
-    if (!force && fraction - _lastReportedFraction < 0.01) return;
-
-    _lastReportedFraction = fraction;
-    _progressBlock(fraction, _currentEntryName);
+// Sets completedUnitCount to the bytes of the archive file read so far, capped
+// at the file size and never decreasing.
+- (void)reportProgressFromArchive:(struct archive *)ar progress:(NSProgress *)progress {
+    int64_t read = MIN(archive_filter_bytes(ar, -1), progress.totalUnitCount);
+    if (read > progress.completedUnitCount) progress.completedUnitCount = read;
 }
 
 - (void)setCancelledError:(NSError **)error {

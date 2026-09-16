@@ -15,7 +15,7 @@
 
 - (BOOL)extractArchiveAtPath:(NSString *)archivePath
                toDestination:(NSString *)destPath
-                    progress:(NAExtractionProgressBlock)progressBlock
+                    progress:(NSProgress *)progress
                        error:(NSError **)error {
     return NO;
 }

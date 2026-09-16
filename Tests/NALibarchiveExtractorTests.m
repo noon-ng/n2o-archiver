@@ -1,5 +1,6 @@
 #import "NATestCase.h"
 #import "NATestFixtures.h"
+#import "NATestProgressObserver.h"
 #import "Plugins/NALibarchiveExtractor.h"
 #import <archive.h>
 #import <archive_entry.h>
@@ -74,7 +75,7 @@
                                             toPath:renamed error:nil];
     NSError *error = nil;
     BOOL ok = [self.extractor extractArchiveAtPath:renamed toDestination:self.destDir
-                                          progress:nil error:&error];
+                                          progress:[NSProgress discreteProgressWithTotalUnitCount:0] error:&error];
     [[NSFileManager defaultManager] removeItemAtPath:renamed error:nil];
     NAAssertFalse(ok, @"a disk image named .rar should not be extracted");
     NAAssertEqual([[NSFileManager defaultManager]
@@ -101,23 +102,27 @@
 
 #pragma mark - Progress reporting
 
-- (void)testProgressReported {
+- (void)testProgressReportsItemBeingWritten {
     NSString *path = [NATestFixtures pathForFixture:@"test.zip"];
-    __block int callCount = 0;
-    __block double lastFraction = -1;
+    NSProgress *progress = [NSProgress discreteProgressWithTotalUnitCount:0];
+    NSMutableSet<NSString *> *names = [NSMutableSet set];
+    NS_VALID_UNTIL_END_OF_SCOPE NATestProgressObserver *observer = [[NATestProgressObserver alloc] initWithProgress:progress
+                                                                               handler:^(double fraction, NSURL *fileURL) {
+        if (fileURL.lastPathComponent) [names addObject:fileURL.lastPathComponent];
+    }];
 
     NSError *error = nil;
     BOOL ok = [self.extractor extractArchiveAtPath:path
                                      toDestination:self.destDir
-                                          progress:^(double fraction, NSString *entry) {
-        callCount++;
-        lastFraction = fraction;
-    }
+                                          progress:progress
                                              error:&error];
 
-    NAAssertTrue(ok, @"extraction should succeed");
-    NAAssertTrue(callCount > 0, @"progress block should be called at least once");
-    NAAssertTrue(lastFraction > 0, @"final fraction should be > 0");
+    NAAssertTrue(ok, @"extraction should succeed: %@", error);
+    NAAssertTrue(progress.totalUnitCount > 0, @"the total should be the archive size");
+    NAAssertEqual(progress.completedUnitCount, progress.totalUnitCount, @"a finished extraction is complete");
+    NAAssertTrue([names containsObject:@"a.txt"], @"fileURL should name the entries written, got %@", names);
+    NAAssertTrue([progress.fileURL.path hasPrefix:@"/"] && progress.fileURL.isFileURL,
+                 @"fileURL should be an absolute file URL, got %@", progress.fileURL);
 }
 
 #pragma mark - canHandleFile
@@ -180,7 +185,7 @@
     NSError *error = nil;
     BOOL ok = [self.extractor extractArchiveAtPath:path
                                      toDestination:self.destDir
-                                          progress:nil
+                                          progress:[NSProgress discreteProgressWithTotalUnitCount:0]
                                              error:&error];
     [[NSFileManager defaultManager] removeItemAtPath:path error:nil];
     NAAssertFalse(ok, @"a text file named .zip should not extract");
@@ -193,7 +198,7 @@
     NSError *error = nil;
     BOOL ok = [self.extractor extractArchiveAtPath:[NATestFixtures pathForFixture:name]
                                      toDestination:self.destDir
-                                          progress:nil
+                                          progress:[NSProgress discreteProgressWithTotalUnitCount:0]
                                              error:&error];
     NAAssertTrue(ok, @"%@ should extract: %@", name, error.localizedDescription);
     NSString *contents = [NSString stringWithContentsOfFile:
@@ -208,12 +213,15 @@
 
 - (void)testProgressIsNondecreasingAndEndsAtOne {
     NSMutableArray<NSNumber *> *fractions = [NSMutableArray array];
+    NSProgress *progress = [NSProgress discreteProgressWithTotalUnitCount:0];
+    NS_VALID_UNTIL_END_OF_SCOPE NATestProgressObserver *observer = [[NATestProgressObserver alloc] initWithProgress:progress
+                                                                               handler:^(double fraction, NSURL *fileURL) {
+        [fractions addObject:@(fraction)];
+    }];
     NSError *error = nil;
     BOOL ok = [self.extractor extractArchiveAtPath:[NATestFixtures pathForFixture:@"test.tar.gz"]
                                      toDestination:self.destDir
-                                          progress:^(double fraction, NSString *entry) {
-        [fractions addObject:@(fraction)];
-    }
+                                          progress:progress
                                              error:&error];
     NAAssertTrue(ok, @"extraction should succeed: %@", error.localizedDescription);
     NAAssertTrue(fractions.count > 0, @"progress should be reported");
@@ -279,7 +287,7 @@
                                                attributes:nil error:nil];
     NSError *error = nil;
     BOOL ok = [self.extractor extractArchiveAtPath:archive toDestination:out
-                                          progress:nil error:&error];
+                                          progress:[NSProgress discreteProgressWithTotalUnitCount:0] error:&error];
     NAAssertTrue(ok, @"extraction should succeed: %@", error.localizedDescription);
     NAAssertTrue(([self modeAt:out relative:@"setuid.bin"] & (S_ISUID | S_ISGID)) == 0,
                  @"setuid should not be restored");
@@ -315,7 +323,7 @@
     NSError *error = nil;
     BOOL ok = [self.extractor extractArchiveAtPath:[NATestFixtures pathForFixture:fixture]
                                      toDestination:out
-                                          progress:nil
+                                          progress:[NSProgress discreteProgressWithTotalUnitCount:0]
                                              error:&error];
     NAAssertTrue(ok, @"%@ should extract: %@", fixture, error.localizedDescription);
     return out;
@@ -334,7 +342,7 @@
     NSError *error = nil;
     BOOL ok = [self.extractor extractArchiveAtPath:[NATestFixtures pathForFixture:@"non-ascii-names.tar"]
                                      toDestination:self.destDir
-                                          progress:nil
+                                          progress:[NSProgress discreteProgressWithTotalUnitCount:0]
                                              error:&error];
     NAAssertTrue(ok, @"extraction should succeed: %@", error.localizedDescription);
     for (NSString *name in @[@"café.txt", @"naïve/résumé.txt", @"after.txt"]) {
@@ -351,7 +359,7 @@
 
     NSError *error = nil;
     BOOL ok = [self.extractor extractArchiveAtPath:path toDestination:self.destDir
-                                          progress:nil error:&error];
+                                          progress:[NSProgress discreteProgressWithTotalUnitCount:0] error:&error];
     NAAssertFalse(ok, @"an archive without entries should not report success");
     NAAssertTrue([error.localizedDescription containsString:@"no files"],
                  @"the error should say the archive contains no files, got %@",
@@ -362,7 +370,7 @@
     NSError *error = nil;
     BOOL ok = [self.extractor extractArchiveAtPath:[NATestFixtures pathForFixture:@"damaged-header.tar"]
                                      toDestination:self.destDir
-                                          progress:nil
+                                          progress:[NSProgress discreteProgressWithTotalUnitCount:0]
                                              error:&error];
     NAAssertFalse(ok, @"a damaged header after the first entry should not report success");
     NAAssertNotNil(error, @"the read error should be reported");
@@ -372,14 +380,17 @@
 
 - (void)testCancelStopsExtractionAfterCurrentEntry {
     NSString *path = [NATestFixtures pathForFixture:@"multi.zip"];
-    NALibarchiveExtractor *extractor = self.extractor;
+    NSProgress *progress = [NSProgress discreteProgressWithTotalUnitCount:0];
+    // Cancels when the first entry has been written.
+    NS_VALID_UNTIL_END_OF_SCOPE NATestProgressObserver *observer = [[NATestProgressObserver alloc] initWithProgress:progress
+                                                                               handler:^(double fraction, NSURL *fileURL) {
+        [progress cancel];
+    }];
     NSError *error = nil;
-    BOOL ok = [extractor extractArchiveAtPath:path
-                                toDestination:self.destDir
-                                     progress:^(double fraction, NSString *entry) {
-        [extractor cancelExtraction];
-    }
-                                        error:&error];
+    BOOL ok = [self.extractor extractArchiveAtPath:path
+                                     toDestination:self.destDir
+                                          progress:progress
+                                             error:&error];
     NAAssertFalse(ok, @"cancelled extraction should return NO");
     NAAssertTrue([error.domain isEqualToString:NSCocoaErrorDomain] &&
                  error.code == NSUserCancelledError,
@@ -396,7 +407,7 @@
     NSError *error = nil;
     BOOL ok = [self.extractor extractArchiveAtPath:path
                                      toDestination:self.destDir
-                                          progress:nil
+                                          progress:[NSProgress discreteProgressWithTotalUnitCount:0]
                                              error:&error];
     NAAssertFalse(ok, @"corrupt archive should fail");
     NAAssertNotNil(error, @"error should be set");
@@ -406,7 +417,7 @@
     NSError *error = nil;
     BOOL ok = [self.extractor extractArchiveAtPath:@"/nonexistent/file.zip"
                                      toDestination:self.destDir
-                                          progress:nil
+                                          progress:[NSProgress discreteProgressWithTotalUnitCount:0]
                                              error:&error];
     NAAssertFalse(ok, @"missing file should fail");
     NAAssertNotNil(error, @"error should be set");
@@ -483,7 +494,7 @@
     NSError *error = nil;
     BOOL ok = [self.extractor extractArchiveAtPath:path
                                      toDestination:self.destDir
-                                          progress:nil
+                                          progress:[NSProgress discreteProgressWithTotalUnitCount:0]
                                              error:&error];
     NAAssertTrue(ok, @"extraction of %@ should succeed: %@", name,
                  error.localizedDescription);
@@ -506,7 +517,7 @@
                                                attributes:nil error:nil];
     return [self.extractor extractArchiveAtPath:[NATestFixtures pathForFixture:name]
                                   toDestination:out
-                                       progress:nil
+                                       progress:[NSProgress discreteProgressWithTotalUnitCount:0]
                                           error:error];
 }
 

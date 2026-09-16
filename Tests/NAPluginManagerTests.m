@@ -13,15 +13,15 @@
 
 - (void)testRegisterBuiltinClass {
     NAPluginManager *pm = [[NAPluginManager alloc] init];
-    [pm registerBuiltinClass:[NALibarchiveExtractor class]];
+    [pm registerExtractorClass:[NALibarchiveExtractor class]];
     NAAssertEqual([pm allPluginClasses].count, 1u,
                   @"should have one registered class");
 }
 
 - (void)testDuplicateRegistration {
     NAPluginManager *pm = [[NAPluginManager alloc] init];
-    [pm registerBuiltinClass:[NALibarchiveExtractor class]];
-    [pm registerBuiltinClass:[NALibarchiveExtractor class]];
+    [pm registerExtractorClass:[NALibarchiveExtractor class]];
+    [pm registerExtractorClass:[NALibarchiveExtractor class]];
     NAAssertEqual([pm allPluginClasses].count, 1u,
                   @"duplicate registration should be ignored");
 }
@@ -30,7 +30,7 @@
 
 - (void)testExtractorForZipByPath {
     NAPluginManager *pm = [[NAPluginManager alloc] init];
-    [pm registerBuiltinClass:[NALibarchiveExtractor class]];
+    [pm registerExtractorClass:[NALibarchiveExtractor class]];
 
     id<NAExtractorPlugin> ext = [pm extractorForFileAtPath:
         [NATestFixtures pathForFixture:@"test.zip"]];
@@ -41,7 +41,7 @@
 
 - (void)testExtractorForTarGzByPath {
     NAPluginManager *pm = [[NAPluginManager alloc] init];
-    [pm registerBuiltinClass:[NALibarchiveExtractor class]];
+    [pm registerExtractorClass:[NALibarchiveExtractor class]];
 
     id<NAExtractorPlugin> ext = [pm extractorForFileAtPath:
         [NATestFixtures pathForFixture:@"test.tar.gz"]];
@@ -52,7 +52,7 @@
 
 - (void)testMagicByteSniffingPriority {
     NAPluginManager *pm = [[NAPluginManager alloc] init];
-    [pm registerBuiltinClass:[NALibarchiveExtractor class]];
+    [pm registerExtractorClass:[NALibarchiveExtractor class]];
 
     // Rename a zip to have no extension — magic bytes should still match.
     NSString *src = [NATestFixtures pathForFixture:@"test.zip"];
@@ -129,7 +129,7 @@
 
 - (void)testNoExtractorForUnknownFormat {
     NAPluginManager *pm = [[NAPluginManager alloc] init];
-    [pm registerBuiltinClass:[NALibarchiveExtractor class]];
+    [pm registerExtractorClass:[NALibarchiveExtractor class]];
 
     // Use a nonexistent file — no magic bytes to sniff, no extension match.
     id<NAExtractorPlugin> ext = [pm extractorForFileAtPath:@"/nonexistent/file.xyz"];

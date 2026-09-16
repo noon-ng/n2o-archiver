@@ -59,6 +59,7 @@ TEST_SOURCES = Tests/main.m \
                Tests/NATestCase.m \
                Tests/NATestFixtures.m \
                Tests/NATestScriptedExtractor.m \
+               Tests/NATestProgressObserver.m \
                Tests/NAWait.m
 
 APP_SOURCES_NO_MAIN = $(filter-out N2OArchiver/main.m,$(SOURCES))

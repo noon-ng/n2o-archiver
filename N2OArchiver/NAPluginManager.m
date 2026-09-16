@@ -26,15 +26,15 @@
     return self;
 }
 
-- (void)registerBuiltinClass:(Class<NAExtractorPlugin>)cls {
+- (void)registerExtractorClass:(Class<NAExtractorPlugin>)cls {
     if (![self.pluginClasses containsObject:cls]) {
         [self.pluginClasses addObject:cls];
     }
 }
 
 - (void)registerBuiltinExtractors {
-    [self registerBuiltinClass:[NA7zExtractor class]];
-    [self registerBuiltinClass:[NALibarchiveExtractor class]];
+    [self registerExtractorClass:[NA7zExtractor class]];
+    [self registerExtractorClass:[NALibarchiveExtractor class]];
 }
 
 - (void)loadPluginsFromDirectories:(NSArray<NSString *> *)directories {
@@ -73,7 +73,7 @@
                 continue;
             }
 
-            [self registerBuiltinClass:(Class<NAExtractorPlugin>)principalClass];
+            [self registerExtractorClass:(Class<NAExtractorPlugin>)principalClass];
             NSLog(@"N2OArchiver: loaded plugin: %@ (%@)",
                   item, NSStringFromClass(principalClass));
         }

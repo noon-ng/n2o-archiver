@@ -8,14 +8,17 @@
 @property (nonatomic, readwrite) NAExtractionJobState state;
 @property (nonatomic, readwrite, copy, nullable) NSString *destinationPath;
 @property (nonatomic, readwrite, strong, nullable) NSError *error;
-// Read on the extraction queue, written on the main queue.
-@property (atomic, assign) BOOL cancelRequested;
-@property (nonatomic, strong, nullable) id<NAExtractorPlugin> extractor;
+// Passed to the extractor, which updates it on its own threads; cancelled by
+// cancel. Read on the extraction queue and by the monitor.
+@property (nonatomic, strong) NSProgress *progress;
 @property (nonatomic, copy, nullable) NSString *stagingPath;
 // Held while active: keeps the app from being suspended by App Nap or quit by
 // sudden or automatic termination during an extraction.
 @property (nonatomic, strong, nullable) id<NSObject> activity;
-@property (nonatomic, strong, nullable) dispatch_source_t spaceMonitor;
+// Reports progress and checks free space while active.
+@property (nonatomic, strong, nullable) dispatch_source_t monitor;
+@property (nonatomic, assign) double reportedFraction;
+@property (nonatomic, copy, nullable) NSURL *reportedFileURL;
 // Set when the job stopped itself for low free space; reported as its error.
 @property (nonatomic, strong, nullable) NSError *stopError;
 @end
@@ -31,6 +34,8 @@
         _archivePath = [archivePath copy];
         _pluginManager = pluginManager;
         _state = NAExtractionJobStatePending;
+        _progress = [NSProgress discreteProgressWithTotalUnitCount:0];
+        _reportedFraction = -1;
         _spaceIsLow = ^BOOL(NSString *path) {
             struct statfs fs;
             if (statfs(path.fileSystemRepresentation, &fs) != 0) return NO;
@@ -84,25 +89,20 @@
         return;
     }
 
-    self.extractor = extractor;
     self.stagingPath = stagingPath;
     self.state = NAExtractionJobStateExtracting;
     self.activity = [[NSProcessInfo processInfo] beginActivityWithOptions:NSActivityUserInitiated
                                                                    reason:@"Extracting an archive"];
-    [self startSpaceMonitor];
+    [self startMonitor];
 
     // The block keeps the job alive until it has finished.
     NSString *archivePath = self.archivePath;
+    NSProgress *progress = self.progress;
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         NSError *error = nil;
         BOOL ok = [extractor extractArchiveAtPath:archivePath
                                     toDestination:stagingPath
-                                         progress:^(double fraction, NSString *entry) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                if (self.cancelRequested || !self.progressHandler) return;
-                self.progressHandler(fraction, entry ?: @"");
-            });
-        }
+                                         progress:progress
                                             error:&error];
 
         // Mark everything written, including partial and cancelled output,
@@ -114,7 +114,7 @@
                                                           error:&quarantineError];
         if (quarantined) quarantineError = nil;
 
-        if (self.cancelRequested) {
+        if (progress.isCancelled) {
             // The staging directory was created for this job, so it held
             // nothing before; its contents were already marked.
             [[NSFileManager defaultManager] removeItemAtPath:stagingPath error:nil];
@@ -137,11 +137,8 @@
             [self finishWithState:NAExtractionJobStateCancelled error:nil];
             break;
         case NAExtractionJobStateExtracting:
-            self.cancelRequested = YES;
             self.state = NAExtractionJobStateCancelling;
-            if ([self.extractor respondsToSelector:@selector(cancelExtraction)]) {
-                [self.extractor cancelExtraction];
-            }
+            [self.progress cancel];
             break;
         default:
             break;
@@ -203,15 +200,14 @@
 }
 
 - (void)finishWithState:(NAExtractionJobState)state error:(nullable NSError *)error {
-    if (self.spaceMonitor) {
-        dispatch_source_cancel(self.spaceMonitor);
-        self.spaceMonitor = nil;
+    if (self.monitor) {
+        dispatch_source_cancel(self.monitor);
+        self.monitor = nil;
     }
     if (self.activity) {
         [[NSProcessInfo processInfo] endActivity:self.activity];
         self.activity = nil;
     }
-    self.extractor = nil;
     self.error = error;
     self.state = state;
 
@@ -258,20 +254,23 @@
     return [NSError errorWithDomain:error.domain code:error.code userInfo:userInfo];
 }
 
-#pragma mark - Free space
+#pragma mark - Monitor
 
-// Stops the extraction when free space on the destination volume runs low, so
-// an archive that expands far beyond its size (for example a zip bomb) cannot
-// fill the volume. The output is removed through the cancel path.
-- (void)startSpaceMonitor {
+// Every 0.1 s while extracting, passes changed progress to progressHandler,
+// then stops the extraction if free space on the destination volume is low,
+// so an archive that expands far beyond its size (for example a zip bomb)
+// cannot fill the volume. The output is removed through the cancel path.
+- (void)startMonitor {
     dispatch_source_t timer =
         dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
     dispatch_source_set_timer(timer, dispatch_time(DISPATCH_TIME_NOW, 0),
-                              (uint64_t)(0.25 * NSEC_PER_SEC), (uint64_t)(0.05 * NSEC_PER_SEC));
+                              (uint64_t)(0.1 * NSEC_PER_SEC), (uint64_t)(0.02 * NSEC_PER_SEC));
     __weak typeof(self) weakSelf = self;
     dispatch_source_set_event_handler(timer, ^{
         __strong typeof(weakSelf) s = weakSelf;
-        if (!s || s.state != NAExtractionJobStateExtracting || !s.spaceIsLow(s.stagingPath)) return;
+        if (!s || s.state != NAExtractionJobStateExtracting) return;
+        [s reportProgress];
+        if (!s.spaceIsLow(s.stagingPath)) return;
 
         s.stopError = [NSError errorWithDomain:NSCocoaErrorDomain
                                           code:NSFileWriteOutOfSpaceError
@@ -283,8 +282,20 @@
         }];
         [s cancel];
     });
-    self.spaceMonitor = timer;
+    self.monitor = timer;
     dispatch_resume(timer);
+}
+
+- (void)reportProgress {
+    double fraction = self.progress.fractionCompleted;
+    NSURL *fileURL = self.progress.fileURL;
+    if (fraction == self.reportedFraction && (fileURL == self.reportedFileURL ||
+                                              [fileURL isEqual:self.reportedFileURL])) {
+        return;
+    }
+    self.reportedFraction = fraction;
+    self.reportedFileURL = fileURL;
+    if (self.progressHandler) self.progressHandler(fraction, fileURL.lastPathComponent ?: @"");
 }
 
 #pragma mark - Destination

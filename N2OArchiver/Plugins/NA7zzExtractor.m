@@ -1,10 +1,6 @@
 #import "NA7zzExtractor.h"
 #import "NA7zzTool.h"
 
-@interface NA7zzExtractor ()
-@property (atomic, assign) BOOL cancelled;
-@end
-
 @implementation NA7zzExtractor
 
 + (NSArray<NSString *> *)supportedExtensions {
@@ -51,18 +47,13 @@
 
 - (BOOL)extractArchiveAtPath:(NSString *)archivePath
                toDestination:(NSString *)destPath
-                    progress:(NAExtractionProgressBlock)progressBlock
+                    progress:(NSProgress *)progress
                        error:(NSError **)error {
     return [NA7zzTool extractArchiveAtPath:archivePath
                                 formatType:[[self class] formatTypeForFileAtPath:archivePath]
                              toDestination:destPath
-                                  progress:progressBlock
-                               isCancelled:^BOOL { return self.cancelled; }
+                                  progress:progress
                                      error:error];
-}
-
-- (void)cancelExtraction {
-    self.cancelled = YES;
 }
 
 - (NSArray<NSString *> *)contentsOfArchiveAtPath:(NSString *)path

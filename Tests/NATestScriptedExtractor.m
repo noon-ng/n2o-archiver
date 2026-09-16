@@ -17,16 +17,32 @@ static NSError *NAScriptedError(NSInteger code, NSDictionary *userInfo) {
 
 - (BOOL)extractArchiveAtPath:(NSString *)archivePath
                toDestination:(NSString *)destPath
-                    progress:(NAExtractionProgressBlock)progressBlock
+                    progress:(NSProgress *)progress
                        error:(NSError **)error {
     NSString *file = [destPath stringByAppendingPathComponent:@"payload.txt"];
     [@"payload" writeToFile:file atomically:NO encoding:NSUTF8StringEncoding error:nil];
     NSString *name = archivePath.lastPathComponent;
 
-    if ([name hasPrefix:@"wait"] || [name hasPrefix:@"cancel-fail"]) {
+    if ([name hasPrefix:@"wait"]) {
+        progress.totalUnitCount = 2;
+        progress.fileURL = [NSURL fileURLWithPath:file];
+        progress.completedUnitCount = 1;
+        for (int i = 0; i < 1000; i++) {
+            if (dispatch_semaphore_wait(NAScriptedRelease,
+                                        dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10 * NSEC_PER_MSEC))) == 0) {
+                progress.completedUnitCount = 2;
+                return YES;
+            }
+            if (progress.isCancelled) {
+                if (error) *error = [NSError errorWithDomain:NSCocoaErrorDomain code:NSUserCancelledError userInfo:nil];
+                return NO;
+            }
+        }
+        return YES;
+    }
+    if ([name hasPrefix:@"cancel-fail"]) {
         dispatch_semaphore_wait(NAScriptedRelease,
                                 dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10 * NSEC_PER_SEC)));
-        if ([name hasPrefix:@"wait"]) return YES;
         if (error) *error = NAScriptedError(4, @{NSLocalizedDescriptionKey: @"Failed while cancelling."});
         return NO;
     }

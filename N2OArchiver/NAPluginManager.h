@@ -18,7 +18,9 @@ NS_ASSUME_NONNULL_BEGIN
 /// Apple-issued certificate (Developer ID or App Store), including nested
 /// code. Plugins that fail this check are not loaded.
 + (BOOL)isTrustedPluginAtPath:(NSString *)path error:(NSError **)error;
-- (void)registerBuiltinClass:(Class<NAExtractorPlugin>)cls;
+/// Adds an extractor class after those already registered; used for built-in
+/// extractors and for classes from loaded plugin bundles.
+- (void)registerExtractorClass:(Class<NAExtractorPlugin>)cls;
 
 /// Registers the extractors shipped with the app. Sniffing uses the first
 /// match in registration order, so NA7zExtractor is registered before

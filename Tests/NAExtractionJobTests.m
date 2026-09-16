@@ -33,7 +33,7 @@ static const char *const kQuarantineValue = "0083;00000000;N2OArchiverTests;";
     // A fresh manager, so routing does not depend on other suites.
     self.pluginManager = [[NAPluginManager alloc] init];
     [self.pluginManager registerBuiltinExtractors];
-    [self.pluginManager registerBuiltinClass:[NATestScriptedExtractor class]];
+    [self.pluginManager registerExtractorClass:[NATestScriptedExtractor class]];
     NAScriptedRelease = dispatch_semaphore_create(0);
 }
 
@@ -93,6 +93,24 @@ static const char *const kQuarantineValue = "0083;00000000;N2OArchiverTests;";
 
     NAAssertEqual(calls, 1u, @"the completion handler should run once");
     NAAssertTrue(onMainThread, @"the completion handler should run on the main thread");
+}
+
+- (void)testProgressHandlerReceivesExtractorProgress {
+    NSString *archive = [self writeFile:@"wait-progress.n2oscripted"];
+    NAExtractionJob *job = [self jobForArchive:archive];
+    __block double lastFraction = -1;
+    __block NSString *lastEntry = nil;
+    job.progressHandler = ^(double fraction, NSString *entry) {
+        lastFraction = fraction;
+        lastEntry = entry;
+    };
+    [job start];
+
+    NAAssertTrue(NAWaitUntil(^BOOL { return lastFraction == 0.5; }, 10.0),
+                 @"the extractor's 50%% should reach the progress handler, got %f", lastFraction);
+    NAAssertEqualObjects(lastEntry, @"payload.txt", @"the entry should be the progress's fileURL name");
+    dispatch_semaphore_signal(NAScriptedRelease);
+    NAAssertTrue([self waitForJob:job], @"the job should finish");
 }
 
 #pragma mark - Staging directory
@@ -265,6 +283,22 @@ static const char *const kQuarantineValue = "0083;00000000;N2OArchiverTests;";
     NAAssertNil(job.error, @"the extractor's error should not be reported for a cancel");
     NAAssertEqual([self stagingDirectories].count, 0u, @"the staging directory should be removed");
     NAAssertFalse([self fileExists:@"cancel-fail"], @"no output folder should remain");
+}
+
+- (void)testCancelIsPassedToExtractorThroughProgress {
+    NSString *archive = [self writeFile:@"wait-cancel.n2oscripted"];
+    NAExtractionJob *job = [self jobForArchive:archive];
+    [job start];
+    NAAssertTrue(NAWaitUntil(^BOOL { return [self stagingDirectories].count == 1; }, 10.0),
+                 @"extraction should start");
+
+    [job cancel];
+
+    // NAScriptedRelease is not signalled: the extractor returns only because
+    // its progress was cancelled.
+    NAAssertTrue([self waitForJob:job], @"the extractor should stop when the job is cancelled");
+    NAAssertEqual(job.state, NAExtractionJobStateCancelled, @"the job should end cancelled");
+    NAAssertEqual([self stagingDirectories].count, 0u, @"the staging directory should be removed");
 }
 
 - (void)testCancelKeepsExistingDirectory {

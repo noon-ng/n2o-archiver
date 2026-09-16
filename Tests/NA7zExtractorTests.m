@@ -86,7 +86,7 @@
     NSError *error = nil;
     BOOL ok = [self.extractor extractArchiveAtPath:path
                                       toDestination:self.destDir
-                                           progress:nil
+                                           progress:[NSProgress discreteProgressWithTotalUnitCount:0]
                                               error:&error];
     NAAssertTrue(ok, @"7z extraction should succeed: %@", error.localizedDescription);
 
@@ -140,19 +140,16 @@
 #pragma mark - Progress
 
 - (void)testProgressReachesCompletion {
-    __block NSUInteger calls = 0;
-    __block double lastFraction = -1;
+    NSProgress *progress = [NSProgress discreteProgressWithTotalUnitCount:0];
     NSError *error = nil;
     BOOL ok = [self.extractor extractArchiveAtPath:[NATestFixtures pathForFixture:@"test.7z"]
                                      toDestination:self.destDir
-                                          progress:^(double fraction, NSString *entry) {
-        calls++;
-        lastFraction = fraction;
-    }
+                                          progress:progress
                                              error:&error];
     NAAssertTrue(ok, @"extraction should succeed: %@", error.localizedDescription);
-    NAAssertTrue(calls > 0, @"progress should be reported");
-    NAAssertTrue(lastFraction == 1.0, @"last progress should be 1.0, got %f", lastFraction);
+    NAAssertEqual(progress.totalUnitCount, 100, @"7zz progress is in percent");
+    NAAssertEqual(progress.fractionCompleted, 1.0, @"progress should end at 1.0, got %f",
+                  progress.fractionCompleted);
 }
 
 - (void)testProgressParserHandlesSplitStatusStrings {
@@ -180,8 +177,8 @@
 
     NAAssertEqualObjects(fractions, (@[@0.0, @0.03, @0.97]),
                          @"fractions should be 0, 0.03, 0.97, got %@", fractions);
-    NAAssertEqualObjects(entries, (@[@"", @"big.bin", @"big.bin"]),
-                         @"entries should carry the file name, got %@", entries);
+    NAAssertEqualObjects(entries, (@[@"", @"src/big.bin", @"src/big.bin"]),
+                         @"entries should carry the path 7zz prints, got %@", entries);
 }
 
 - (void)testListContentsExcludesArchivePath {
@@ -209,7 +206,7 @@
     NSError *error = nil;
     BOOL ok = [self.extractor extractArchiveAtPath:@"-test.7z"
                                      toDestination:outDir
-                                          progress:nil
+                                          progress:[NSProgress discreteProgressWithTotalUnitCount:0]
                                              error:&error];
     [fm changeCurrentDirectoryPath:previousDir];
 
@@ -221,18 +218,19 @@
     NSString *path = [NATestFixtures pathForFixture:@"encrypted.7z"];
     NA7zExtractor *extractor = self.extractor;
     NSString *dest = self.destDir;
+    NSProgress *progress = [NSProgress discreteProgressWithTotalUnitCount:0];
     __block BOOL ok = YES;
     __block NSError *error = nil;
     dispatch_semaphore_t done = dispatch_semaphore_create(0);
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         NSError *e = nil;
-        ok = [extractor extractArchiveAtPath:path toDestination:dest progress:nil error:&e];
+        ok = [extractor extractArchiveAtPath:path toDestination:dest progress:progress error:&e];
         error = e;
         dispatch_semaphore_signal(done);
     });
     long timedOut = dispatch_semaphore_wait(done,
         dispatch_time(DISPATCH_TIME_NOW, (int64_t)(20 * NSEC_PER_SEC)));
-    if (timedOut) [extractor cancelExtraction];
+    if (timedOut) [progress cancel];
 
     NAAssertFalse(timedOut, @"extraction should not wait for a password");
     NAAssertFalse(ok, @"encrypted archive should fail");
@@ -257,7 +255,7 @@
     NSError *error = nil;
     BOOL ok = [self.extractor extractArchiveAtPath:@"/nonexistent/file.7z"
                                      toDestination:self.destDir
-                                          progress:nil
+                                          progress:[NSProgress discreteProgressWithTotalUnitCount:0]
                                              error:&error];
     NAAssertFalse(ok, @"a missing archive should fail");
     NAAssertEqualObjects(error.localizedDescription, @"7zz could not extract the archive.",
@@ -284,7 +282,7 @@
     NSError *error = nil;
     BOOL ok = [routed extractArchiveAtPath:renamed
                              toDestination:self.destDir
-                                  progress:nil
+                                  progress:[NSProgress discreteProgressWithTotalUnitCount:0]
                                      error:&error];
     [[NSFileManager defaultManager] removeItemAtPath:renamed error:nil];
 
@@ -299,11 +297,12 @@
 #pragma mark - Cancellation
 
 - (void)testCancelBeforeExtractionReturnsCancelled {
-    [self.extractor cancelExtraction];
+    NSProgress *progress = [NSProgress discreteProgressWithTotalUnitCount:0];
+    [progress cancel];
     NSError *error = nil;
     BOOL ok = [self.extractor extractArchiveAtPath:[NATestFixtures pathForFixture:@"test.7z"]
                                      toDestination:self.destDir
-                                          progress:nil
+                                          progress:progress
                                              error:&error];
     NAAssertFalse(ok, @"cancelled extraction should return NO");
     NAAssertTrue([error.domain isEqualToString:NSCocoaErrorDomain] &&
@@ -320,7 +319,7 @@
     NSError *error = nil;
     BOOL ok = [self.extractor extractArchiveAtPath:@"/nonexistent/file.7z"
                                       toDestination:self.destDir
-                                           progress:nil
+                                           progress:[NSProgress discreteProgressWithTotalUnitCount:0]
                                               error:&error];
     NAAssertFalse(ok, @"missing file should fail");
     NAAssertNotNil(error, @"error should be set");

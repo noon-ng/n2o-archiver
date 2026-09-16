@@ -42,13 +42,15 @@ typedef NS_ENUM(NSInteger, NAExtractionJobState) {
 /// or nil when cancel was called.
 @property (nonatomic, readonly, strong, nullable) NSError *error;
 
-/// Called on the main queue with the fraction done and the current entry name.
+/// Called on the main queue, at most every 0.1 s and only when something
+/// changed, with the fraction done and the name of the item being written.
 @property (nonatomic, copy, nullable) void (^progressHandler)(double fraction, NSString *entry);
 
 /// Called once on the main queue when the job reaches a final state.
 @property (nonatomic, copy, nullable) void (^completionHandler)(NAExtractionJob *job);
 
-/// Returns YES when free space on the volume holding path is low. Defaults to
+/// Returns YES when free space on the volume holding path is low. Checked
+/// every 0.1 s while extracting. Defaults to
 /// statfs with +isFreeSpaceLowWithAvailable:total:; replaceable in tests.
 @property (nonatomic, copy) BOOL (^spaceIsLow)(NSString *path);
 

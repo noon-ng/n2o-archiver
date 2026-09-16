@@ -26,8 +26,8 @@
 
 - (void)setUp {
     [super setUp];
-    [[NAPluginManager sharedManager] registerBuiltinClass:[NALibarchiveExtractor class]];
-    [[NAPluginManager sharedManager] registerBuiltinClass:[NATestScriptedExtractor class]];
+    [[NAPluginManager sharedManager] registerExtractorClass:[NALibarchiveExtractor class]];
+    [[NAPluginManager sharedManager] registerExtractorClass:[NATestScriptedExtractor class]];
     NAScriptedRelease = dispatch_semaphore_create(0);
     self.workDir = [NSTemporaryDirectory() stringByAppendingPathComponent:
         [NSString stringWithFormat:@"n2o-window-%u", arc4random()]];

@@ -8,7 +8,9 @@ extern dispatch_semaphore_t _Nullable NAScriptedRelease;
 
 /// Extractor for files ending in .n2oscripted. Every mode first writes
 /// payload.txt. By archive name:
-/// - wait…: blocks until NAScriptedRelease is signalled, then succeeds
+/// - wait…: sets progress to 50% on payload.txt, then blocks until
+///   NAScriptedRelease is signalled (succeeds) or the progress is cancelled
+///   (fails with NSUserCancelledError)
 /// - cancel-fail…: blocks until NAScriptedRelease is signalled, then fails
 /// - fail…: fails
 /// - immutable…: sets UF_IMMUTABLE on payload.txt, then fails

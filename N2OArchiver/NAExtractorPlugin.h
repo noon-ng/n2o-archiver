@@ -2,9 +2,6 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-typedef void (^NAExtractionProgressBlock)(double fractionComplete,
-                                          NSString *currentEntry);
-
 @protocol NAExtractorPlugin <NSObject>
 
 @required
@@ -14,21 +11,24 @@ typedef void (^NAExtractionProgressBlock)(double fractionComplete,
 
 + (BOOL)canHandleFileAtPath:(NSString *)path;
 
+/// Extracts the archive into the existing directory destPath.
+///
+/// progress is owned by the caller and may be read from any thread. The
+/// extractor sets its totalUnitCount and completedUnitCount as it works (in
+/// any unit; completedUnitCount equals totalUnitCount on success) and its
+/// fileURL to the item being written. Cancellation is requested with
+/// -[NSProgress cancel], possibly before this call starts: the extractor then
+/// stops and returns NO with NSUserCancelledError in NSCocoaErrorDomain. Files
+/// already written are left for the caller to remove.
 - (BOOL)extractArchiveAtPath:(NSString *)archivePath
                toDestination:(NSString *)destPath
-                    progress:(nullable NAExtractionProgressBlock)progressBlock
+                    progress:(NSProgress *)progress
                        error:(NSError **)error;
 
 @optional
 
 - (nullable NSArray<NSString *> *)contentsOfArchiveAtPath:(NSString *)path
                                                     error:(NSError **)error;
-
-/// Asks a running extractArchiveAtPath:toDestination:progress:error: call to
-/// stop. May be called from any thread, including before extraction starts.
-/// The extraction call then returns NO with NSUserCancelledError in
-/// NSCocoaErrorDomain. Files already written are left for the caller to remove.
-- (void)cancelExtraction;
 
 @end
 

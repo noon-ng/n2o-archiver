@@ -63,7 +63,7 @@ static NSString *const NA7zzErrorDomain = @"sh.n2o.archiver.7zz";
 
     NSRange nameRange = [match rangeAtIndex:2];
     if (nameRange.location != NSNotFound) {
-        _lastEntry = [text substringWithRange:nameRange].lastPathComponent;
+        _lastEntry = [text substringWithRange:nameRange];
     }
     _handler(fraction, _lastEntry);
 }
@@ -181,20 +181,21 @@ static NSString *const NA7zzMinimumVersion = @"25.01";
 + (BOOL)extractArchiveAtPath:(NSString *)archivePath
                   formatType:(NSString *)formatType
                toDestination:(NSString *)destPath
-                    progress:(nullable NAExtractionProgressBlock)progressBlock
-                 isCancelled:(nullable BOOL (^)(void))isCancelled
+                    progress:(NSProgress *)progress
                        error:(NSError **)error {
-    if (isCancelled && isCancelled()) {
+    if (progress.isCancelled) {
         [self setCancelledError:error];
         return NO;
     }
 
-    __block NSString *lastEntry = @"";
+    progress.totalUnitCount = 100;
+    NSURL *destURL = [NSURL fileURLWithPath:destPath isDirectory:YES];
     NA7zzProgressParser *parser =
         [[NA7zzProgressParser alloc] initWithHandler:^(double fraction, NSString *entry) {
-        lastEntry = entry;
-        if (progressBlock) progressBlock(fraction, entry);
+        progress.completedUnitCount = (int64_t)llround(fraction * 100);
+        if (entry.length > 0) progress.fileURL = [destURL URLByAppendingPathComponent:entry];
     }];
+    BOOL (^isCancelled)(void) = ^BOOL { return progress.isCancelled; };
 
     // -bsp1 sends progress to stdout even when stdout is not a terminal.
     NSArray<NSString *> *arguments = @[
@@ -218,7 +219,7 @@ static NSString *const NA7zzMinimumVersion = @"25.01";
 
     // The cancel may arrive after 7zz has exited; report it so the caller
     // treats the output as cancelled.
-    if (cancelled || (isCancelled && isCancelled())) {
+    if (cancelled || isCancelled()) {
         [self setCancelledError:error];
         return NO;
     }
@@ -229,12 +230,7 @@ static NSString *const NA7zzMinimumVersion = @"25.01";
         return NO;
     }
 
-    if (progressBlock) {
-        // The parser calls its handler while holding its own lock.
-        NSString *entry;
-        @synchronized (parser) { entry = lastEntry; }
-        progressBlock(1.0, entry);
-    }
+    progress.completedUnitCount = progress.totalUnitCount;
     return YES;
 }
 
