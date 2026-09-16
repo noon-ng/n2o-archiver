@@ -60,8 +60,6 @@
 }
 
 - (void)testExtractTarXz {
-    NSString *path = [NATestFixtures pathForFixture:@"test.tar.xz"];
-    if (![[NSFileManager defaultManager] fileExistsAtPath:path]) return; // xz not available
     [self assertExtractsFixture:@"test.tar.xz"];
 }
 

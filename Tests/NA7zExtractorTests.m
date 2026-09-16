@@ -28,9 +28,20 @@
     [super tearDown];
 }
 
+// Tests that run 7zz need one installed: outside the app bundle, NA7zzTool
+// falls back to the Homebrew locations. They report a skip instead of failing
+// when there is none, so the suite still runs on a machine without it.
+- (BOOL)needs7zz {
+    if ([NA7zzTool toolPath]) return NO;
+    fprintf(stderr, "  SKIP: a test in NA7zExtractorTests needs 7zz: %s\n",
+            [NA7zzTool toolError].localizedDescription.UTF8String);
+    return YES;
+}
+
 #pragma mark - Tool availability
 
 - (void)testToolPathFound {
+    if ([self needs7zz]) return;
     NAAssertNotNil([NA7zzTool toolPath], @"7zz should be found on this system");
 }
 
@@ -59,6 +70,7 @@
 }
 
 - (void)testOldToolIsRejectedWithVersionInError {
+    if ([self needs7zz]) return;
     NSString *fake = [self.destDir stringByAppendingPathComponent:@"7zz"];
     [@"#!/bin/sh\necho '7-Zip (z) 24.09 (arm64) : Copyright (c) 1999-2024 Igor Pavlov : 2024-11-29'\n"
         writeToFile:fake atomically:NO encoding:NSUTF8StringEncoding error:nil];
@@ -79,6 +91,7 @@
 #pragma mark - Extraction
 
 - (void)testExtract7z {
+    if ([self needs7zz]) return;
     NSString *path = [NATestFixtures pathForFixture:@"test.7z"];
     NAAssertTrue([[NSFileManager defaultManager] fileExistsAtPath:path],
                  @"test.7z fixture should exist");
@@ -103,6 +116,7 @@
 #pragma mark - Contents listing
 
 - (void)testListContents {
+    if ([self needs7zz]) return;
     NSString *path = [NATestFixtures pathForFixture:@"test.7z"];
     NSError *error = nil;
     NSArray<NSString *> *entries = [self.extractor contentsOfArchiveAtPath:path
@@ -140,6 +154,7 @@
 #pragma mark - Progress
 
 - (void)testProgressReachesCompletion {
+    if ([self needs7zz]) return;
     NSProgress *progress = [NSProgress discreteProgressWithTotalUnitCount:0];
     NSError *error = nil;
     BOOL ok = [self.extractor extractArchiveAtPath:[NATestFixtures pathForFixture:@"test.7z"]
@@ -182,6 +197,7 @@
 }
 
 - (void)testListContentsExcludesArchivePath {
+    if ([self needs7zz]) return;
     NSString *path = [NATestFixtures pathForFixture:@"test.7z"];
     NSError *error = nil;
     NSArray<NSString *> *entries = [self.extractor contentsOfArchiveAtPath:path error:&error];
@@ -192,6 +208,7 @@
 }
 
 - (void)testExtractRelativePathStartingWithDash {
+    if ([self needs7zz]) return;
     NSFileManager *fm = [NSFileManager defaultManager];
     NSString *workDir = [self.destDir stringByAppendingPathComponent:@"work"];
     NSString *outDir = [self.destDir stringByAppendingPathComponent:@"out"];
@@ -215,6 +232,7 @@
 }
 
 - (void)testEncryptedArchiveFailsWithPasswordError {
+    if ([self needs7zz]) return;
     NSString *path = [NATestFixtures pathForFixture:@"encrypted.7z"];
     NA7zExtractor *extractor = self.extractor;
     NSString *dest = self.destDir;
@@ -242,6 +260,7 @@
 }
 
 - (void)testListEncryptedArchiveFailsWithPasswordError {
+    if ([self needs7zz]) return;
     NSError *error = nil;
     NSArray *entries = [self.extractor contentsOfArchiveAtPath:
         [NATestFixtures pathForFixture:@"encrypted.7z"] error:&error];
@@ -252,6 +271,7 @@
 }
 
 - (void)testToolFailureKeepsStandardErrorAsFailureReason {
+    if ([self needs7zz]) return;
     NSError *error = nil;
     BOOL ok = [self.extractor extractArchiveAtPath:@"/nonexistent/file.7z"
                                      toDestination:self.destDir
@@ -271,6 +291,7 @@
 // would otherwise detect and extract any format it supports, such as a disk
 // image.
 - (void)testOtherFormatWithThisExtensionIsNotExtracted {
+    if ([self needs7zz]) return;
     NSString *renamed = [NATestFixtures pathForFixture:@"disk-image.7z"];
     [[NSFileManager defaultManager] copyItemAtPath:[NATestFixtures pathForFixture:@"disk-image.dmg"]
                                             toPath:renamed error:nil];
@@ -316,6 +337,7 @@
 #pragma mark - Error handling
 
 - (void)testExtractMissingFileFails {
+    if ([self needs7zz]) return;
     NSError *error = nil;
     BOOL ok = [self.extractor extractArchiveAtPath:@"/nonexistent/file.7z"
                                       toDestination:self.destDir
