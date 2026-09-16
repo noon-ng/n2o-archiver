@@ -78,10 +78,16 @@ ICON_SIZES = 16 32 128 256 512
 INSTALL_DIR ?= /Applications
 SUDO        ?= sudo
 
+# Localization: English strings live next to the sources and are copied into
+# the bundle. Regenerate the table from the NSLocalizedString calls with
+# `make strings` after adding or changing one.
+STRINGS_SRC  = N2OArchiver/Resources/en.lproj/Localizable.strings
+STRINGS_DEST = $(BUNDLE)/Contents/Resources/en.lproj/Localizable.strings
+
 HELPER_7ZZ   = $(BUNDLE)/Contents/Helpers/7zz
 ENTITLEMENTS = N2OArchiver/N2OArchiver.entitlements
 
-.PHONY: all clean run test icons install uninstall verify-bundle
+.PHONY: all clean run test icons strings install uninstall verify-bundle
 
 all: $(BUNDLE)
 
@@ -100,8 +106,13 @@ $(ICON_ICNS): $(ICONSET_DIR)
 	@mkdir -p $(dir $@)
 	iconutil -c icns $< -o $@
 
-$(BUNDLE): $(EXECUTABLE) N2OArchiver/Info.plist $(ENTITLEMENTS) icons
+strings:
+	genstrings -q -o $(dir $(STRINGS_SRC)) N2OArchiver/*.m N2OArchiver/Plugins/*.m
+
+$(BUNDLE): $(EXECUTABLE) N2OArchiver/Info.plist $(ENTITLEMENTS) $(STRINGS_SRC) icons
 	@cp N2OArchiver/Info.plist $(BUNDLE)/Contents/Info.plist
+	@mkdir -p $(dir $(STRINGS_DEST))
+	@cp $(STRINGS_SRC) $(STRINGS_DEST)
 	@mkdir -p $(BUNDLE)/Contents/PlugIns $(BUNDLE)/Contents/Helpers
 	@cp -f "$$(realpath $(SEVENZIP_PREFIX)/bin/7zz)" $(HELPER_7ZZ)
 	@chmod 755 $(HELPER_7ZZ)

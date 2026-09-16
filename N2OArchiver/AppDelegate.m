@@ -54,7 +54,8 @@
     panel.allowsMultipleSelection = YES;
     panel.canChooseDirectories = NO;
     panel.canChooseFiles = YES;
-    panel.message = @"Select archives to extract";
+    panel.message = NSLocalizedString(@"Select archives to extract",
+                                      @"Prompt in the open panel");
 
     NSArray<UTType *> *types = [self allowedContentTypes];
     if (types.count > 0) panel.allowedContentTypes = types;

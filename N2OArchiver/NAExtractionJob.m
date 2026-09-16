@@ -68,7 +68,8 @@
                         error:[NSError errorWithDomain:NSCocoaErrorDomain
                                                   code:NSFeatureUnsupportedError
                                               userInfo:@{NSLocalizedDescriptionKey:
-            @"N2O Archiver does not recognize the format of this file."}]];
+            NSLocalizedString(@"N2O Archiver does not recognize the format of this file.",
+                              @"Error when no extractor handles the file")}]];
         return;
     }
 
@@ -77,7 +78,8 @@
     if (!stagingURL) {
         NSMutableDictionary *userInfo = [@{
             NSLocalizedDescriptionKey:
-                @"The folder for the extracted files could not be created next to the archive.",
+                NSLocalizedString(@"The folder for the extracted files could not be created next to the archive.",
+                                  @"Error when the staging directory cannot be created"),
         } mutableCopy];
         if (dirError) {
             userInfo[NSLocalizedFailureReasonErrorKey] = dirError.localizedDescription;
@@ -180,9 +182,12 @@
         if (!destinationURL) {
             NSMutableDictionary *userInfo = [@{
                 NSLocalizedDescriptionKey:
-                    @"The extracted files could not be moved into place next to the archive.",
+                    NSLocalizedString(@"The extracted files could not be moved into place next to the archive.",
+                                      @"Error when the output cannot be renamed"),
                 NSLocalizedRecoverySuggestionErrorKey: [NSString stringWithFormat:
-                    @"They are in the hidden folder “%@”.", stagingURL.path],
+                    NSLocalizedString(@"They are in the hidden folder “%@”.",
+                                      @"Where the output was left; %@ is a folder path"),
+                    stagingURL.path],
             } mutableCopy];
             if (moveError) {
                 userInfo[NSLocalizedFailureReasonErrorKey] = moveError.localizedDescription;
@@ -224,7 +229,9 @@
     if (!error) {
         error = [NSError errorWithDomain:NSCocoaErrorDomain
                                     code:NSFileReadUnknownError
-                                userInfo:@{NSLocalizedDescriptionKey: @"Extraction failed."}];
+                                userInfo:@{NSLocalizedDescriptionKey:
+            NSLocalizedString(@"Extraction failed.",
+                              @"Error when an extractor fails without a message")}];
     }
     if (!quarantineError) return error;
 
@@ -247,7 +254,8 @@
     NSMutableDictionary *userInfo = [error.userInfo mutableCopy];
     userInfo[NSLocalizedDescriptionKey] = error.localizedDescription;
     NSString *note = [NSString stringWithFormat:
-        @"The partially extracted files could not be removed and are in the hidden folder “%@”.%@",
+        NSLocalizedString(@"The partially extracted files could not be removed and are in the hidden folder “%@”.%@",
+                          @"Leftover output note; %@ is a folder path, then the reason or nothing"),
         url.path, removeError ? [@" " stringByAppendingString:removeError.localizedDescription] : @""];
     NSString *suggestion = error.localizedRecoverySuggestion;
     userInfo[NSLocalizedRecoverySuggestionErrorKey] =
@@ -276,10 +284,12 @@
         s.stopError = [NSError errorWithDomain:NSCocoaErrorDomain
                                           code:NSFileWriteOutOfSpaceError
                                       userInfo:@{
-            NSLocalizedDescriptionKey: @"Extraction was stopped.",
-            NSLocalizedRecoverySuggestionErrorKey:
+            NSLocalizedDescriptionKey: NSLocalizedString(@"Extraction was stopped.",
+                                                         @"Error when free space runs low"),
+            NSLocalizedRecoverySuggestionErrorKey: NSLocalizedString(
                 @"The disk is almost full: free space dropped below 1 GB, or below 5% of "
                 @"the volume if that is smaller. The partially extracted files were removed.",
+                @"Why the extraction was stopped"),
         }];
         [s cancel];
     });

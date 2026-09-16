@@ -113,7 +113,8 @@ static NSString *const NA7zzMinimumVersion = @"25.01";
                                         error:(NSError **)error {
     NSFileManager *fm = [NSFileManager defaultManager];
     NSString *description = nil;
-    NSString *suggestion = @"Install it with “brew install sevenzip”.";
+    NSString *suggestion = NSLocalizedString(@"Install it with “brew install sevenzip”.",
+                                             @"How to get 7zz when it is missing");
 
     for (NSString *candidate in candidates) {
         if (![fm isExecutableFileAtPath:candidate]) continue;
@@ -124,19 +125,25 @@ static NSString *const NA7zzMinimumVersion = @"25.01";
         if (!description) {
             description = version
                 ? [NSString stringWithFormat:
-                    @"7zz %@ at %@ is older than %@, the first version with fixes "
-                    @"for CVE-2025-11001, CVE-2025-11002 and CVE-2025-55188.",
+                    NSLocalizedString(@"7zz %@ at %@ is older than %@, the first version with fixes "
+                                      @"for CVE-2025-11001, CVE-2025-11002 and CVE-2025-55188.",
+                                      @"Error for an old 7zz; version, path, minimum version"),
                     version, candidate, NA7zzMinimumVersion]
                 : [NSString stringWithFormat:
-                    @"The version of 7zz at %@ could not be determined.", candidate];
-            suggestion = @"Update it with “brew upgrade sevenzip”.";
+                    NSLocalizedString(@"The version of 7zz at %@ could not be determined.",
+                                      @"Error when 7zz does not report a version; %@ is its path"),
+                    candidate];
+            suggestion = NSLocalizedString(@"Update it with “brew upgrade sevenzip”.",
+                                           @"How to replace a 7zz that is too old");
         }
     }
 
     if (error) {
         if (!description) {
-            description = [NSString stringWithFormat:@"7zz was not found at %@.",
-                           [candidates componentsJoinedByString:@" or "]];
+            description = [NSString stringWithFormat:
+                NSLocalizedString(@"7zz was not found at %@.",
+                                  @"Error when no 7zz exists; %@ lists the paths searched"),
+                [candidates componentsJoinedByString:@" or "]];
         }
         *error = [NSError errorWithDomain:NA7zzErrorDomain
                                      code:NA7zzErrorToolUnavailable
@@ -227,7 +234,8 @@ static NSString *const NA7zzMinimumVersion = @"25.01";
 
     if (status != 0) {
         if (error) *error = [self errorForStatus:status stderrData:stderrData
-                                        fallback:@"7zz could not extract the archive."];
+                                        fallback:NSLocalizedString(@"7zz could not extract the archive.",
+                                                                   @"Error when 7zz exits with a failure")];
         return NO;
     }
 
@@ -251,7 +259,8 @@ static NSString *const NA7zzMinimumVersion = @"25.01";
     if (status < 0) return nil;
     if (status != 0) {
         if (error) *error = [self errorForStatus:status stderrData:stderrData
-                                        fallback:@"7zz could not list the archive."];
+                                        fallback:NSLocalizedString(@"7zz could not list the archive.",
+                                                                   @"Error when listing with 7zz fails")];
         return nil;
     }
 
@@ -365,9 +374,12 @@ static NSString *const NA7zzMinimumVersion = @"25.01";
     // password.
     NSMutableDictionary *userInfo = [NSMutableDictionary dictionary];
     if ([text containsString:@"Wrong password"]) {
-        userInfo[NSLocalizedDescriptionKey] = @"The archive is password-protected.";
+        userInfo[NSLocalizedDescriptionKey] =
+            NSLocalizedString(@"The archive is password-protected.",
+                              @"Error for an encrypted archive");
         userInfo[NSLocalizedRecoverySuggestionErrorKey] =
-            @"N2O Archiver cannot extract password-protected archives yet.";
+            NSLocalizedString(@"N2O Archiver cannot extract password-protected archives yet.",
+                              @"What the user can do about an encrypted archive");
     } else {
         userInfo[NSLocalizedDescriptionKey] = fallback;
     }

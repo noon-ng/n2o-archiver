@@ -36,17 +36,24 @@ static void (^NAWillOpenItemHandler)(NSString *path);
     if (failed.count == 0) return YES;
 
     if (error) {
+        // Whole sentences rather than assembled fragments, so a translation
+        // can put the count and the path where its grammar needs them.
         NSString *description = failed.count == 1
-            ? @"1 extracted item could not be marked as downloaded from the internet."
+            ? NSLocalizedString(@"1 extracted item could not be marked as downloaded from the internet.",
+                                @"Quarantine failure, one item")
             : [NSString stringWithFormat:
-                @"%lu extracted items could not be marked as downloaded from the internet.",
+                NSLocalizedString(@"%lu extracted items could not be marked as downloaded from the internet.",
+                                  @"Quarantine failure, several items; %lu is the count"),
                 (unsigned long)failed.count];
-        NSString *suggestion = [NSString stringWithFormat:
-            @"macOS will not check %@ before %@. %@: %@",
-            failed.count == 1 ? @"this item" : @"these items",
-            failed.count == 1 ? @"it opens" : @"they open",
-            failed.count == 1 ? @"Item" : @"First item",
-            failed.firstObject];
+        NSString *suggestion = failed.count == 1
+            ? [NSString stringWithFormat:
+                NSLocalizedString(@"macOS will not check this item before it opens. Item: %@",
+                                  @"Quarantine failure detail, one item; %@ is its path"),
+                failed.firstObject]
+            : [NSString stringWithFormat:
+                NSLocalizedString(@"macOS will not check these items before they open. First item: %@",
+                                  @"Quarantine failure detail, several items; %@ is the first path"),
+                failed.firstObject];
         *error = [NSError errorWithDomain:NAQuarantineErrorDomain
                                      code:NAQuarantineErrorItemsNotMarked
                                  userInfo:@{NSLocalizedDescriptionKey: description,

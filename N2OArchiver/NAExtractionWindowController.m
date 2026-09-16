@@ -43,7 +43,7 @@
     [self showWindow:nil];
 
     self.progressBar.doubleValue = 0.0;
-    self.statusLabel.stringValue = @"Extracting…";
+    self.statusLabel.stringValue = NSLocalizedString(@"Extracting…", @"Status while extracting");
 
     NAExtractionJob *job =
         [[NAExtractionJob alloc] initWithArchiveURL:self.archiveURL
@@ -72,7 +72,8 @@
             if (job.error) {
                 [self presentError:job.error
                              title:[NSString stringWithFormat:
-                    @"“%@” was extracted, but some files are not marked as downloaded.",
+                    NSLocalizedString(@"“%@” was extracted, but some files are not marked as downloaded.",
+                                      @"Sheet title after a quarantine failure; %@ is the archive name"),
                     self.archiveURL.lastPathComponent]];
             } else {
                 [self extractionFinishedAtURL:job.destinationURL];
@@ -97,7 +98,7 @@
 
 - (void)extractionFinishedAtURL:(NSURL *)destinationURL {
     self.progressBar.doubleValue = 100.0;
-    self.statusLabel.stringValue = @"Done.";
+    self.statusLabel.stringValue = NSLocalizedString(@"Done.", @"Status when extraction finished");
 
     self.revealHandler(destinationURL);
 
@@ -110,8 +111,10 @@
 #pragma mark - Error display
 
 - (NSString *)failureTitle {
-    return [NSString stringWithFormat:@"“%@” could not be extracted.",
-            self.archiveURL.lastPathComponent];
+    return [NSString stringWithFormat:
+        NSLocalizedString(@"“%@” could not be extracted.",
+                          @"Sheet title after a failure; %@ is the archive name"),
+        self.archiveURL.lastPathComponent];
 }
 
 // Longer recovery suggestions go into the collapsible details area.
@@ -125,7 +128,7 @@ static const NSUInteger NAMaxSummarySuggestionLength = 300;
 - (void)presentError:(NSError *)error title:(NSString *)title {
     self.statusLabel.stringValue = title;
     self.progressBar.hidden = YES;
-    self.cancelButton.title = @"Close";
+    self.cancelButton.title = NSLocalizedString(@"Close", @"Button that closes the window");
     self.cancelButton.action = @selector(close);
     self.cancelButton.enabled = YES;
 
@@ -158,7 +161,7 @@ static const NSUInteger NAMaxSummarySuggestionLength = 300;
     alert.alertStyle = NSAlertStyleWarning;
     alert.messageText = title;
     alert.informativeText = [summary componentsJoinedByString:@"\n\n"];
-    [alert addButtonWithTitle:@"Close"];
+    [alert addButtonWithTitle:NSLocalizedString(@"Close", @"Button that closes the window")];
     if (details.count > 0) {
         alert.accessoryView = [self errorDetailsViewWithText:[details componentsJoinedByString:@"\n\n"]];
     }
@@ -175,7 +178,8 @@ static const CGFloat NAErrorDetailsWidth = 400;
 static const CGFloat NAErrorDetailsHeight = 180;
 
 - (NSView *)errorDetailsViewWithText:(NSString *)text {
-    NSButton *button = [NSButton buttonWithTitle:@"Show Details"
+    NSButton *button = [NSButton buttonWithTitle:NSLocalizedString(@"Show Details",
+                                                                   @"Button that expands the error details")
                                           target:self
                                           action:@selector(toggleErrorDetails:)];
     [button sizeToFit];
@@ -207,7 +211,9 @@ static const CGFloat NAErrorDetailsHeight = 180;
 
 - (void)toggleErrorDetails:(id)sender {
     self.errorDetailsScrollView.hidden = !self.errorDetailsScrollView.hidden;
-    self.errorDetailsButton.title = self.errorDetailsScrollView.hidden ? @"Show Details" : @"Hide Details";
+    self.errorDetailsButton.title = self.errorDetailsScrollView.hidden
+        ? NSLocalizedString(@"Show Details", @"Button that expands the error details")
+        : NSLocalizedString(@"Hide Details", @"Button that collapses the error details");
     [self.errorDetailsButton sizeToFit];
     [self layoutErrorDetails];
     [self.errorAlert layout];
@@ -233,7 +239,7 @@ static const CGFloat NAErrorDetailsHeight = 180;
     if (self.job.state == NAExtractionJobStateCancelling) return;
 
     [self.job cancel];
-    self.statusLabel.stringValue = @"Cancelling…";
+    self.statusLabel.stringValue = NSLocalizedString(@"Cancelling…", @"Status while cancelling");
     self.cancelButton.enabled = NO;
 }
 
@@ -294,7 +300,8 @@ static NSPoint NANextWindowTopLeft = {0, 0};
     [content addSubview:self.progressBar];
 
     // Status label
-    self.statusLabel = [NSTextField labelWithString:@"Preparing…"];
+    self.statusLabel = [NSTextField labelWithString:NSLocalizedString(@"Preparing…",
+                                                                      @"Status before extraction starts")];
     self.statusLabel.font = [NSFont systemFontOfSize:11];
     self.statusLabel.textColor = NSColor.secondaryLabelColor;
     self.statusLabel.lineBreakMode = NSLineBreakByTruncatingMiddle;
@@ -302,7 +309,8 @@ static NSPoint NANextWindowTopLeft = {0, 0};
     [content addSubview:self.statusLabel];
 
     // Cancel button
-    self.cancelButton = [NSButton buttonWithTitle:@"Cancel"
+    self.cancelButton = [NSButton buttonWithTitle:NSLocalizedString(@"Cancel",
+                                                                    @"Button that stops the extraction")
                                            target:self
                                            action:@selector(cancelExtraction:)];
     // Esc cancels the extraction, as it dismisses a sheet.
