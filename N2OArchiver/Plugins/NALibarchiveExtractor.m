@@ -1,4 +1,5 @@
 #import "NALibarchiveExtractor.h"
+#import "NALog.h"
 #import <archive.h>
 #import <archive_entry.h>
 #include <sys/stat.h>
@@ -162,7 +163,7 @@ static BOOL NAIsUncompressedRaw(struct archive *a) {
             break;
         }
         if (r == ARCHIVE_WARN) {
-            NSLog(@"N2OArchiver: header read warning: %s", archive_error_string(a));
+            os_log(NALog(), "header read warning: %{public}s", archive_error_string(a));
         }
         entryCount++;
 
@@ -210,7 +211,7 @@ static BOOL NAIsUncompressedRaw(struct archive *a) {
             break;
         }
         if (r != ARCHIVE_OK) {
-            NSLog(@"N2OArchiver: header write warning: %s", archive_error_string(ext));
+            os_log(NALog(), "header write warning: %{public}s", archive_error_string(ext));
         }
 
         // Data is read for every entry except directories, including entries
@@ -350,7 +351,7 @@ static BOOL NAIsUncompressedRaw(struct archive *a) {
 
         r = (int)archive_write_data_block(aw, buff, size, offset);
         if (r != ARCHIVE_OK) {
-            NSLog(@"N2OArchiver: write error: %s", archive_error_string(aw));
+            os_log_error(NALog(), "write error: %{public}s", archive_error_string(aw));
             return r;
         }
 

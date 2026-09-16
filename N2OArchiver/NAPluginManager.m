@@ -1,4 +1,5 @@
 #import "NAPluginManager.h"
+#import "NALog.h"
 #import "Plugins/NA7zExtractor.h"
 #import "Plugins/NALibarchiveExtractor.h"
 #import <Security/Security.h>
@@ -52,8 +53,9 @@
             // certificate that signed it.
             NSError *trustError = nil;
             if (![NAPluginManager isTrustedPluginAtPath:fullPath error:&trustError]) {
-                NSLog(@"N2OArchiver: not loading plugin without a valid Apple-issued "
-                      @"signature: %@ (%@)", fullPath, trustError.localizedDescription);
+                os_log_error(NALog(), "not loading plugin without a valid Apple-issued "
+                             "signature: %{private}@ (%{public}@)",
+                             fullPath, trustError.localizedDescription);
                 continue;
             }
 
@@ -61,21 +63,21 @@
             if (!pluginBundle) continue;
 
             if (![pluginBundle load]) {
-                NSLog(@"N2OArchiver: failed to load plugin bundle: %@", fullPath);
+                os_log_error(NALog(), "failed to load plugin bundle: %{private}@", fullPath);
                 continue;
             }
 
             Class principalClass = [pluginBundle principalClass];
             if (!principalClass ||
                 ![principalClass conformsToProtocol:@protocol(NAExtractorPlugin)]) {
-                NSLog(@"N2OArchiver: plugin principal class does not conform "
-                      @"to NAExtractorPlugin: %@", fullPath);
+                os_log_error(NALog(), "plugin principal class does not conform to "
+                             "NAExtractorPlugin: %{private}@", fullPath);
                 continue;
             }
 
             [self registerExtractorClass:(Class<NAExtractorPlugin>)principalClass];
-            NSLog(@"N2OArchiver: loaded plugin: %@ (%@)",
-                  item, NSStringFromClass(principalClass));
+            os_log(NALog(), "loaded plugin: %{public}@ (%{public}@)",
+                   item, NSStringFromClass(principalClass));
         }
     }
 }

@@ -1,5 +1,6 @@
 #import "NAExtractionJob.h"
 #import "NAQuarantine.h"
+#import "NALog.h"
 #include <stdio.h>
 #include <sys/mount.h>
 #include <sys/stat.h>
@@ -408,14 +409,16 @@
                          error:nil];
         }
         if (![fm moveItemAtPath:staging toPath:singleItem error:nil]) {
-            NSLog(@"N2OArchiver: could not restore %@ from %@", singleItem, staging);
+            os_log_error(NALog(), "could not restore %{private}@ from %{private}@",
+                         singleItem, staging);
         }
         return;
     }
 
     // rmdir only removes an empty directory.
     if (rmdir(staging.fileSystemRepresentation) != 0) {
-        NSLog(@"N2OArchiver: could not remove %@: %s", staging, strerror(errno));
+        os_log_error(NALog(), "could not remove %{private}@: %{public}s",
+                     staging, strerror(errno));
     }
 }
 
