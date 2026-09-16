@@ -37,16 +37,16 @@
     }
 }
 
-- (BOOL)application:(NSApplication *)sender openFile:(NSString *)filename {
-    [self extractFile:filename];
-    return YES;
+- (void)application:(NSApplication *)application openURLs:(NSArray<NSURL *> *)urls {
+    for (NSURL *url in urls) {
+        if (url.isFileURL) [self extractFile:url.path];
+    }
 }
 
-- (void)application:(NSApplication *)sender openFiles:(NSArray<NSString *> *)filenames {
-    for (NSString *path in filenames) {
-        [self extractFile:path];
-    }
-    [sender replyToOpenOrPrint:NSApplicationDelegateReplySuccess];
+// The app keeps no state to restore, and secure coding is required from
+// macOS 14 on.
+- (BOOL)applicationSupportsSecureRestorableState:(NSApplication *)application {
+    return YES;
 }
 
 - (IBAction)openDocument:(id)sender {

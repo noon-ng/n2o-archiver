@@ -34,12 +34,14 @@
 
 #pragma mark - File open handling
 
-- (void)testOpenFileReturnsYes {
+- (void)testOpenURLsExtractsEachFile {
     AppDelegate *delegate = [self launchedDelegate];
 
     NSString *path = [NATestFixtures pathForFixture:@"test.zip"];
-    BOOL handled = [delegate application:NSApp openFile:path];
-    NAAssertTrue(handled, @"should accept a valid archive path");
+    [delegate application:NSApp openURLs:@[[NSURL fileURLWithPath:path],
+                                           [NSURL URLWithString:@"https://example.com"]]];
+    NAAssertEqual([[delegate valueForKey:@"windowControllers"] count], 1u,
+                  @"only the file URL should open a window");
 
     NAAssertTrue(NAWaitUntil(^BOOL { return [[delegate valueForKey:@"windowControllers"] count] == 0; }, 10.0),
                  @"the extraction window should close");
@@ -69,6 +71,11 @@
 // Closing the open panel counts as closing the last window, so AppKit's
 // terminate-after-last-window-closed can quit before the panel's completion
 // handler opens an extraction window. The delegate terminates explicitly.
+- (void)testSupportsSecureRestorableState {
+    NAAssertTrue([[[AppDelegate alloc] init] applicationSupportsSecureRestorableState:NSApp],
+                 @"the app should opt into secure state restoration");
+}
+
 - (void)testDoesNotUseTerminateAfterLastWindowClosed {
     AppDelegate *delegate = [[AppDelegate alloc] init];
     BOOL result = [delegate applicationShouldTerminateAfterLastWindowClosed:NSApp];
@@ -79,7 +86,7 @@
     AppDelegate *delegate = [self launchedDelegate];
 
     NSString *path = [NATestFixtures pathForFixture:@"multi.zip"];
-    [delegate application:NSApp openFile:path];
+    [delegate application:NSApp openURLs:@[[NSURL fileURLWithPath:path]]];
     NAAssertEqual([[delegate valueForKey:@"windowControllers"] count], 1u,
                   @"opening a file should add a window controller");
 
@@ -111,7 +118,7 @@
     NSString *archive = [dir stringByAppendingPathComponent:@"test.zip"];
     [fm copyItemAtPath:[NATestFixtures pathForFixture:@"test.zip"] toPath:archive error:nil];
 
-    [delegate application:NSApp openFile:archive];
+    [delegate application:NSApp openURLs:@[[NSURL fileURLWithPath:archive]]];
     NSApplicationTerminateReply reply = [delegate applicationShouldTerminate:NSApp];
     NAAssertEqual(reply, NSTerminateLater,
                   @"quit during extraction should wait for cleanup");
