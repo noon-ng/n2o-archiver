@@ -43,13 +43,45 @@
 
 #pragma mark - Initialization
 
-- (void)testInitCreatesWindow {
-    NAExtractionWindowController *wc =
-        [[NAExtractionWindowController alloc] initWithArchivePath:[NATestFixtures pathForFixture:@"test.zip"]];
+- (void)testWindowIsNamedAfterTheArchive {
+    NSString *archive = [self copyFixture:@"test.zip" to:@"holiday photos.zip"];
+    NAExtractionWindowController *wc = [[NAExtractionWindowController alloc] initWithArchivePath:archive];
 
     NAAssertNotNil(wc.window, @"window should be created");
-    NAAssertEqualObjects(wc.window.title, @"N2O Archiver", @"window title should be N2O Archiver");
+    NAAssertEqualObjects(wc.window.title, @"holiday photos.zip", @"the window should be named after the archive");
+    NAAssertEqualObjects(wc.window.representedURL.path, archive,
+                         @"the title bar should carry the archive's proxy icon");
+    NAAssertEqualObjects([[wc valueForKey:@"filenameLabel"] stringValue], @"holiday photos.zip",
+                         @"the window should show the archive name");
     NAAssertFalse(wc.isWorking, @"a new controller should not be working");
+}
+
+- (void)testConcurrentWindowsAreCascaded {
+    NSString *archive = [self copyFixture:@"test.zip" to:@"test.zip"];
+    NAExtractionWindowController *first = [[NAExtractionWindowController alloc] initWithArchivePath:archive];
+    NAExtractionWindowController *second = [[NAExtractionWindowController alloc] initWithArchivePath:archive];
+
+    NAAssertFalse(NSEqualPoints(first.window.frame.origin, second.window.frame.origin),
+                  @"a second window should not cover the first, both at %@",
+                  NSStringFromPoint(first.window.frame.origin));
+}
+
+- (void)testEscapeCancels {
+    NSString *archive = [self writeFile:@"wait.n2oscripted"];
+    NAExtractionWindowController *wc = [[NAExtractionWindowController alloc] initWithArchivePath:archive];
+    NSButton *cancel = [wc valueForKey:@"cancelButton"];
+
+    NAAssertEqualObjects(cancel.keyEquivalent, @"\e", @"Esc should work the Cancel button");
+    [wc beginExtraction];
+    NAExtractionJob *job = [wc valueForKey:@"job"];
+    [cancel performClick:nil];
+
+    NAAssertTrue(job.state == NAExtractionJobStateCancelling ||
+                 job.state == NAExtractionJobStateCancelled,
+                 @"clicking Cancel should cancel the job, state %ld", (long)job.state);
+    NAAssertTrue(NAWaitUntil(^BOOL { return !wc.isWorking && !wc.window.isVisible; }, 10.0),
+                 @"the cancelled extraction should be cleaned up and its window closed");
+    NAAssertFalse([self fileExists:@"wait"], @"output of the cancelled extraction should be removed");
 }
 
 #pragma mark - Extraction flow

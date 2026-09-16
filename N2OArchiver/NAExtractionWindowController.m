@@ -25,9 +25,14 @@
     if (self) {
         _archivePath = [archivePath copy];
         _revealHandler = ^(NSString *path) {
-            [[NSWorkspace sharedWorkspace] selectFile:nil inFileViewerRootedAtPath:path];
+            // Selects the output folder in its parent, rather than opening it.
+            [[NSWorkspace sharedWorkspace] activateFileViewerSelectingURLs:
+                @[[NSURL fileURLWithPath:path isDirectory:YES]]];
         };
         window.delegate = self;
+        window.title = archivePath.lastPathComponent;
+        // Gives the window the archive's proxy icon in its title bar.
+        window.representedURL = [NSURL fileURLWithPath:archivePath];
         [self setupUI];
         self.filenameLabel.stringValue = archivePath.lastPathComponent;
     }
@@ -122,6 +127,7 @@ static const NSUInteger NAMaxSummarySuggestionLength = 300;
     self.progressBar.hidden = YES;
     self.cancelButton.title = @"Close";
     self.cancelButton.action = @selector(close);
+    self.cancelButton.enabled = YES;
 
     NSString *description = error.localizedDescription ?: @"";
     NSString *reason = error.localizedFailureReason ?: @"";
@@ -243,6 +249,11 @@ static const CGFloat NAErrorDetailsHeight = 180;
 
 #pragma mark - Window and UI setup
 
+// Places the first window in the middle of the screen and each further window
+// down and to the right of the one before, so concurrent extractions do not
+// hide one another.
+static NSPoint NANextWindowTopLeft = {0, 0};
+
 - (NSWindow *)createWindow {
     NSRect frame = NSMakeRect(0, 0, 420, 120);
     NSWindow *window =
@@ -253,7 +264,12 @@ static const CGFloat NAErrorDetailsHeight = 180;
                                         defer:NO];
     window.title = @"N2O Archiver";
     window.releasedWhenClosed = NO;
-    [window center];
+
+    if (NSEqualPoints(NANextWindowTopLeft, NSZeroPoint)) {
+        [window center];
+        NANextWindowTopLeft = NSMakePoint(NSMinX(window.frame), NSMaxY(window.frame));
+    }
+    NANextWindowTopLeft = [window cascadeTopLeftFromPoint:NANextWindowTopLeft];
     return window;
 }
 
@@ -289,6 +305,8 @@ static const CGFloat NAErrorDetailsHeight = 180;
     self.cancelButton = [NSButton buttonWithTitle:@"Cancel"
                                            target:self
                                            action:@selector(cancelExtraction:)];
+    // Esc cancels the extraction, as it dismisses a sheet.
+    self.cancelButton.keyEquivalent = @"\e";
     self.cancelButton.translatesAutoresizingMaskIntoConstraints = NO;
     [content addSubview:self.cancelButton];
 
