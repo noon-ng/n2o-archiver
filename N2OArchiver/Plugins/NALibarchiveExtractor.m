@@ -4,7 +4,7 @@
 #import <archive_entry.h>
 #include <sys/stat.h>
 
-static NSString *const NALibarchiveErrorDomain = @"sh.n2o.archiver.libarchive";
+NSErrorDomain const NALibarchiveErrorDomain = @"sh.n2o.archiver.libarchive";
 
 // Every format archive_read_support_format_all enables except mtree, which
 // accepts most text files and can reference files elsewhere on disk, plus raw,
@@ -134,7 +134,7 @@ static BOOL NAIsUncompressedRaw(struct archive *a) {
 
     int r = archive_read_open_filename(a, archivePath.fileSystemRepresentation, 10240);
     if (r != ARCHIVE_OK) {
-        [self setError:error fromArchive:a code:1];
+        [self setError:error fromArchive:a code:NALibarchiveErrorOpen];
         archive_read_free(a);
         archive_write_free(ext);
         return NO;
@@ -158,7 +158,7 @@ static BOOL NAIsUncompressedRaw(struct archive *a) {
         // archive cannot be read, which is reported rather than treated as the
         // end of the archive.
         if (r != ARCHIVE_OK && r != ARCHIVE_WARN) {
-            [self setError:error fromArchive:a code:5];
+            [self setError:error fromArchive:a code:NALibarchiveErrorReadHeader];
             success = NO;
             break;
         }
@@ -174,7 +174,9 @@ static BOOL NAIsUncompressedRaw(struct archive *a) {
         }
 
         if (NAIsUncompressedRaw(a)) {
-            [self setError:error description:@"Unrecognized archive format" code:4];
+            [self setError:error
+               description:@"Unrecognized archive format"
+                      code:NALibarchiveErrorUnrecognizedFormat];
             success = NO;
             break;
         }
@@ -189,7 +191,7 @@ static BOOL NAIsUncompressedRaw(struct archive *a) {
         const char *entryPath = archive_entry_pathname(entry);
         if (!entryPath) {
             [self setError:error description:@"An entry in the archive has no readable name."
-                      code:6];
+                      code:NALibarchiveErrorEntryName];
             success = NO;
             break;
         }
@@ -206,7 +208,7 @@ static BOOL NAIsUncompressedRaw(struct archive *a) {
         r = archive_write_header(ext, entry);
         if (r < ARCHIVE_WARN) {
             // Includes entries rejected by the SECURE_* checks above.
-            [self setError:error fromArchive:ext code:3];
+            [self setError:error fromArchive:ext code:NALibarchiveErrorWriteEntry];
             success = NO;
             break;
         }
@@ -224,7 +226,7 @@ static BOOL NAIsUncompressedRaw(struct archive *a) {
             if (progress.isCancelled) {
                 [self setCancelledError:error];
             } else {
-                [self setError:error fromArchive:a code:2];
+                [self setError:error fromArchive:a code:NALibarchiveErrorData];
             }
             success = NO;
             break;
@@ -242,7 +244,9 @@ static BOOL NAIsUncompressedRaw(struct archive *a) {
     }
 
     if (success && entryCount == 0) {
-        [self setError:error description:@"The archive contains no files." code:7];
+        [self setError:error
+           description:@"The archive contains no files."
+                  code:NALibarchiveErrorNoEntries];
         success = NO;
     }
 
@@ -263,7 +267,7 @@ static BOOL NAIsUncompressedRaw(struct archive *a) {
 
     int r = archive_read_open_filename(a, path.fileSystemRepresentation, 10240);
     if (r != ARCHIVE_OK) {
-        [self setError:error fromArchive:a code:1];
+        [self setError:error fromArchive:a code:NALibarchiveErrorOpen];
         archive_read_free(a);
         return nil;
     }
@@ -274,12 +278,14 @@ static BOOL NAIsUncompressedRaw(struct archive *a) {
         r = archive_read_next_header(a, &entry);
         if (r == ARCHIVE_EOF) break;
         if (r != ARCHIVE_OK && r != ARCHIVE_WARN) {
-            [self setError:error fromArchive:a code:5];
+            [self setError:error fromArchive:a code:NALibarchiveErrorReadHeader];
             archive_read_free(a);
             return nil;
         }
         if (NAIsUncompressedRaw(a)) {
-            [self setError:error description:@"Unrecognized archive format" code:4];
+            [self setError:error
+               description:@"Unrecognized archive format"
+                      code:NALibarchiveErrorUnrecognizedFormat];
             archive_read_free(a);
             return nil;
         }
@@ -375,7 +381,7 @@ static BOOL NAIsUncompressedRaw(struct archive *a) {
 
 - (void)setError:(NSError **)error
      fromArchive:(struct archive *)a
-            code:(NSInteger)code {
+            code:(NALibarchiveError)code {
     const char *msg = archive_error_string(a);
     [self setError:error
        description:msg ? [NSString stringWithUTF8String:msg] : @"Unknown archive error"
@@ -384,7 +390,7 @@ static BOOL NAIsUncompressedRaw(struct archive *a) {
 
 - (void)setError:(NSError **)error
      description:(NSString *)description
-            code:(NSInteger)code {
+            code:(NALibarchiveError)code {
     if (!error) return;
     *error = [NSError errorWithDomain:NALibarchiveErrorDomain
                                  code:code

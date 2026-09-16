@@ -2,7 +2,13 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-extern NSString *const NAQuarantineErrorDomain;
+extern NSErrorDomain const NAQuarantineErrorDomain;
+
+typedef NS_ERROR_ENUM(NAQuarantineErrorDomain, NAQuarantineError) {
+    /// Some items could not be marked; their paths are in the error's
+    /// recovery suggestion.
+    NAQuarantineErrorItemsNotMarked = 1,
+};
 
 /// Copies an archive's com.apple.quarantine extended attribute to the files
 /// extracted from it, so Gatekeeper checks apps and executables taken out of a

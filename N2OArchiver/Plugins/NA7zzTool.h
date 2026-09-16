@@ -8,6 +8,15 @@ NS_ASSUME_NONNULL_BEGIN
 /// the handler receives the percentage as a fraction and the entry's path as
 /// printed (relative to the destination).
 /// appendData: may be called from any thread, with data split at any byte.
+/// Errors from running 7zz. The code is the tool's exit status, except for
+/// NA7zzErrorToolUnavailable.
+extern NSErrorDomain const NA7zzErrorDomain;
+
+typedef NS_ERROR_ENUM(NA7zzErrorDomain, NA7zzError) {
+    /// No 7zz was found, or every candidate is older than the minimum version.
+    NA7zzErrorToolUnavailable = -1,
+};
+
 @interface NA7zzProgressParser : NSObject
 
 - (instancetype)initWithHandler:(void (^)(double fraction, NSString *entry))handler;

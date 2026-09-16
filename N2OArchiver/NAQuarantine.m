@@ -5,7 +5,7 @@
 #include <sys/xattr.h>
 #include <unistd.h>
 
-NSString *const NAQuarantineErrorDomain = @"sh.n2o.archiver.quarantine";
+NSErrorDomain const NAQuarantineErrorDomain = @"sh.n2o.archiver.quarantine";
 
 static const char *const kQuarantineAttribute = "com.apple.quarantine";
 
@@ -48,7 +48,7 @@ static void (^NAWillOpenItemHandler)(NSString *path);
             failed.count == 1 ? @"Item" : @"First item",
             failed.firstObject];
         *error = [NSError errorWithDomain:NAQuarantineErrorDomain
-                                     code:1
+                                     code:NAQuarantineErrorItemsNotMarked
                                  userInfo:@{NSLocalizedDescriptionKey: description,
                                             NSLocalizedRecoverySuggestionErrorKey: suggestion,
                                             NSFilePathErrorKey: failed.firstObject}];

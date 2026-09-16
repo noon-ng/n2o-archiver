@@ -1,6 +1,6 @@
 #import "NA7zzTool.h"
 
-static NSString *const NA7zzErrorDomain = @"sh.n2o.archiver.7zz";
+NSErrorDomain const NA7zzErrorDomain = @"sh.n2o.archiver.7zz";
 
 @implementation NA7zzProgressParser {
     NSMutableData *_buffer;
@@ -139,7 +139,7 @@ static NSString *const NA7zzMinimumVersion = @"25.01";
                            [candidates componentsJoinedByString:@" or "]];
         }
         *error = [NSError errorWithDomain:NA7zzErrorDomain
-                                     code:1
+                                     code:NA7zzErrorToolUnavailable
                                  userInfo:@{NSLocalizedDescriptionKey: description,
                                             NSLocalizedRecoverySuggestionErrorKey: suggestion}];
     }
