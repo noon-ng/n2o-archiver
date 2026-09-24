@@ -133,6 +133,41 @@
     NAAssertFalse(outputExists, @"quit during extraction should remove partial output");
 }
 
+// Finder sends every file of a multiple selection in one openURLs: call, and
+// the open panel allows multiple selection.
+- (void)testOpenURLsExtractsSeveralArchivesAtOnce {
+    AppDelegate *delegate = [self launchedDelegate];
+    NSFileManager *fm = [NSFileManager defaultManager];
+    NSString *dir = [NSTemporaryDirectory() stringByAppendingPathComponent:
+        [NSString stringWithFormat:@"n2o-multi-%u", arc4random()]];
+    [fm createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:nil error:nil];
+
+    // Two archives with the same base name: their output folders must not
+    // collide, whichever finishes first.
+    NSMutableArray<NSURL *> *urls = [NSMutableArray array];
+    for (NSString *fixture in @[@"test.zip", @"test.tar", @"multi.zip"]) {
+        NSString *copy = [dir stringByAppendingPathComponent:fixture];
+        [fm copyItemAtPath:[NATestFixtures pathForFixture:fixture] toPath:copy error:nil];
+        [urls addObject:[NSURL fileURLWithPath:copy]];
+    }
+
+    [delegate application:NSApp openURLs:urls];
+    NAAssertEqual([[delegate valueForKey:@"windowControllers"] count], 3u,
+                  @"each archive should get its own window");
+
+    NAAssertTrue(NAWaitUntil(^BOOL { return [[delegate valueForKey:@"windowControllers"] count] == 0; }, 20.0),
+                 @"every extraction should finish and close its window");
+    NAAssertEqual(self.revealed.count, 3u,
+                  @"every archive should be revealed, got %@", self.revealed);
+
+    NSArray<NSString *> *contents = [[fm contentsOfDirectoryAtPath:dir error:nil]
+        sortedArrayUsingSelector:@selector(compare:)];
+    NAAssertEqualObjects(contents, (@[@"multi", @"multi.zip", @"test", @"test 2", @"test.tar", @"test.zip"]),
+                         @"the two archives named test should extract side by side, got %@", contents);
+
+    [fm removeItemAtPath:dir error:nil];
+}
+
 #pragma mark - Document types
 
 // Info.plist decides which files Finder offers the app for; the extractors'
