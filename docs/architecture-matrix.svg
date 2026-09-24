@@ -1,0 +1,491 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1450 3536" width="1450" height="3536" role="img" aria-label="A matrix of N2O Archiver features against the components that implement them: macOS entry points, AppDelegate, the window controller, the extraction job, the plugin manager, the libarchive extractor, the 7z extractor with 7zz, and the build.">
+<rect width="1450" height="3536" fill="var(--surface)"/>
+<style>
+    svg { --surface:#FFFFFF; --ink:#1E1A17; --ink-2:#5B544E; --rule:#D9D5D0;
+          --wood:#7E4D35; --steel:#2F6A8A; --limit:#B42318; --limit-tint:#FBEAE7;
+          --gap:#8A6A00; --gap-tint:#FFF3D1;
+          font-family:"IBM Plex Sans","Helvetica Neue",Arial,sans-serif; }
+    @media (prefers-color-scheme: dark) {
+      svg { --surface:#1D1B19; --ink:#EDE8E3; --ink-2:#A9A19A; --rule:#3A3632;
+            --wood:#D3A47E; --steel:#7DB5D3; --limit:#F28B7D; --limit-tint:#3A1C18;
+            --gap:#E5C160; --gap-tint:#312913; }
+    }
+    .where { font: 500 10px "IBM Plex Mono",Menlo,monospace; letter-spacing:0.06em; fill: var(--ink-2); }
+    .colname { font-size: 12px; font-weight: 600; fill: var(--ink); }
+    .feature { font-size: 13px; font-weight: 600; fill: var(--ink); }
+    .detail { font-size: 12px; fill: var(--ink-2); }
+    .rule { stroke: var(--rule); stroke-width: 1; }
+    .track { stroke: var(--rule); stroke-width: 2; }
+    .chipbox { fill: var(--surface); stroke: var(--rule); rx: 3; }
+    .chipbox.main { stroke: var(--wood); }
+    .chipbox.bg { stroke: var(--steel); }
+    .chipbox.limit { stroke: var(--limit); fill: var(--limit-tint); }
+    .chipbox.gap { stroke: var(--gap); fill: var(--gap-tint); stroke-dasharray: 4 3; }
+    .chiptext { font: 400 12px "IBM Plex Mono",Menlo,monospace; fill: var(--ink); }
+    .chiptext.limit { fill: var(--limit); }
+    .chiptext.gap { fill: var(--gap); }
+  </style>
+<text class="where" x="12" y="36">feature</text>
+<rect x="250" y="0" width="150" height="3" fill="var(--rule)"/>
+<text class="where" x="262" y="36">Info.plist · main.m</text>
+<text class="colname" x="262" y="54">macOS entry points</text>
+<rect x="400" y="0" width="150" height="3" fill="var(--wood)"/>
+<text class="where" x="412" y="36">main thread</text>
+<text class="colname" x="412" y="54">AppDelegate</text>
+<rect x="550" y="0" width="150" height="3" fill="var(--wood)"/>
+<text class="where" x="562" y="36">main thread</text>
+<text class="colname" x="562" y="54">Window controller</text>
+<rect x="700" y="0" width="150" height="3" fill="var(--wood)"/>
+<text class="where" x="712" y="36">main · queue</text>
+<text class="colname" x="712" y="54">Extraction job</text>
+<rect x="850" y="0" width="150" height="3" fill="var(--wood)"/>
+<text class="where" x="862" y="36">main thread</text>
+<text class="colname" x="862" y="54">Plugin manager</text>
+<rect x="1000" y="0" width="150" height="3" fill="var(--steel)"/>
+<text class="where" x="1012" y="36">dispatch queue</text>
+<text class="colname" x="1012" y="54">libarchive</text>
+<rect x="1150" y="0" width="150" height="3" fill="var(--steel)"/>
+<text class="where" x="1162" y="36">queue · process</text>
+<text class="colname" x="1162" y="54">7z + 7zz</text>
+<rect x="1300" y="0" width="150" height="3" fill="var(--rule)"/>
+<text class="where" x="1312" y="36">Makefile</text>
+<text class="colname" x="1312" y="54">Build</text>
+<line class="rule" x1="0" y1="70" x2="1450" y2="70"/>
+<line class="track" x1="325.0" y1="92" x2="775.0" y2="92"/>
+<text class="feature" x="12" y="95">Open from Finder</text>
+<text class="detail" x="12" y="112">double-click or Open With</text>
+<rect class="chipbox" x="262" y="82" width="126" height="53"/>
+<text class="chiptext" x="268" y="96">CFBundleDocumen</text>
+<text class="chiptext" x="268" y="111">tTypes: the 17</text>
+<text class="chiptext" x="268" y="126">extractor UTIs</text>
+<rect class="chipbox" x="262" y="140" width="126" height="53"/>
+<text class="chiptext" x="268" y="154">no system type</text>
+<text class="chiptext" x="268" y="169">for .lz, .zst,</text>
+<text class="chiptext" x="268" y="184">.ar</text>
+<rect class="chipbox main" x="412" y="82" width="126" height="38"/>
+<text class="chiptext main" x="418" y="96">application:ope</text>
+<text class="chiptext main" x="418" y="111">nURLs:</text>
+<rect class="chipbox main" x="412" y="125" width="126" height="38"/>
+<text class="chiptext main" x="418" y="139">extractFileAtUR</text>
+<text class="chiptext main" x="418" y="154">L:</text>
+<rect class="chipbox main" x="562" y="82" width="126" height="23"/>
+<text class="chiptext main" x="568" y="96">beginExtraction</text>
+<rect class="chipbox main" x="712" y="82" width="126" height="23"/>
+<text class="chiptext main" x="718" y="96">start</text>
+<line class="rule" x1="0" y1="205" x2="1450" y2="205"/>
+<line class="track" x1="325.0" y1="227" x2="925.0" y2="227"/>
+<text class="feature" x="12" y="230">Choose archives in a panel</text>
+<text class="detail" x="12" y="247">at launch with no files, or File ▸</text>
+<text class="detail" x="12" y="262">Open…</text>
+<rect class="chipbox" x="262" y="217" width="126" height="23"/>
+<text class="chiptext" x="268" y="231">NSOpenPanel</text>
+<rect class="chipbox" x="262" y="245" width="126" height="38"/>
+<text class="chiptext" x="268" y="259">NAMainMenu:</text>
+<text class="chiptext" x="268" y="274">File ▸ Open… ⌘O</text>
+<rect class="chipbox main" x="412" y="217" width="126" height="38"/>
+<text class="chiptext main" x="418" y="231">applicationDidF</text>
+<text class="chiptext main" x="418" y="246">inishLaunching:</text>
+<rect class="chipbox main" x="412" y="260" width="126" height="23"/>
+<text class="chiptext main" x="418" y="274">openDocument:</text>
+<rect class="chipbox main" x="412" y="288" width="126" height="53"/>
+<text class="chiptext main" x="418" y="302">allowedContentT</text>
+<text class="chiptext main" x="418" y="317">ypes: UTIs +</text>
+<text class="chiptext main" x="418" y="332">extensions</text>
+<rect class="chipbox main" x="862" y="217" width="126" height="38"/>
+<text class="chiptext main" x="868" y="231">allPluginClasse</text>
+<text class="chiptext main" x="868" y="246">s</text>
+<line class="rule" x1="0" y1="353" x2="1450" y2="353"/>
+<line class="track" x1="475.0" y1="375" x2="1225.0" y2="375"/>
+<text class="feature" x="12" y="378">Pick an extractor</text>
+<text class="detail" x="12" y="395">content first, then file extension</text>
+<rect class="chipbox main" x="412" y="365" width="126" height="38"/>
+<text class="chiptext main" x="418" y="379">registerBuiltin</text>
+<text class="chiptext main" x="418" y="394">Extractors</text>
+<rect class="chipbox main" x="412" y="408" width="126" height="38"/>
+<text class="chiptext main" x="418" y="422">registerExtract</text>
+<text class="chiptext main" x="418" y="437">orClass:</text>
+<rect class="chipbox main" x="712" y="365" width="126" height="38"/>
+<text class="chiptext main" x="718" y="379">pluginManager</text>
+<text class="chiptext main" x="718" y="394">injected</text>
+<rect class="chipbox main" x="862" y="365" width="126" height="38"/>
+<text class="chiptext main" x="868" y="379">extractorForFil</text>
+<text class="chiptext main" x="868" y="394">eAtURL:</text>
+<rect class="chipbox bg" x="1012" y="365" width="126" height="83"/>
+<text class="chiptext bg" x="1018" y="379">canHandleFileAt</text>
+<text class="chiptext bg" x="1018" y="394">URL: needs an</text>
+<text class="chiptext bg" x="1018" y="409">entry, not</text>
+<text class="chiptext bg" x="1018" y="424">empty, raw only</text>
+<text class="chiptext bg" x="1018" y="439">if compressed</text>
+<rect class="chipbox bg" x="1162" y="365" width="126" height="38"/>
+<text class="chiptext bg" x="1168" y="379">NA7zzExtractor</text>
+<text class="chiptext bg" x="1168" y="394">+signatures</text>
+<rect class="chipbox bg" x="1162" y="408" width="126" height="38"/>
+<text class="chiptext bg" x="1168" y="422">+formatTypeForF</text>
+<text class="chiptext bg" x="1168" y="437">ileAtURL: → -t</text>
+<line class="rule" x1="0" y1="460" x2="1450" y2="460"/>
+<line class="track" x1="775.0" y1="482" x2="1075.0" y2="482"/>
+<text class="feature" x="12" y="485">Extract zip, rar, tar, cpio,</text>
+<text class="feature" x="12" y="502">iso and more</text>
+<text class="detail" x="12" y="519">all libarchive formats except mtree;</text>
+<text class="detail" x="12" y="534">RAR4 and RAR5</text>
+<rect class="chipbox main" x="712" y="472" width="126" height="38"/>
+<text class="chiptext main" x="718" y="486">dispatch_async</text>
+<text class="chiptext main" x="718" y="501">global queue</text>
+<rect class="chipbox bg" x="1012" y="472" width="126" height="38"/>
+<text class="chiptext bg" x="1018" y="486">NANewArchiveRea</text>
+<text class="chiptext bg" x="1018" y="501">der()</text>
+<rect class="chipbox bg" x="1012" y="515" width="126" height="38"/>
+<text class="chiptext bg" x="1018" y="529">extractArchiveA</text>
+<text class="chiptext bg" x="1018" y="544">tURL:…</text>
+<rect class="chipbox bg" x="1012" y="558" width="126" height="53"/>
+<text class="chiptext bg" x="1018" y="572">no data step</text>
+<text class="chiptext bg" x="1018" y="587">for directories</text>
+<text class="chiptext bg" x="1018" y="602">(RAR5)</text>
+<rect class="chipbox bg" x="1012" y="616" width="126" height="68"/>
+<text class="chiptext bg" x="1018" y="630">continues on</text>
+<text class="chiptext bg" x="1018" y="645">ARCHIVE_WARN,</text>
+<text class="chiptext bg" x="1018" y="660">fails on read</text>
+<text class="chiptext bg" x="1018" y="675">errors</text>
+<rect class="chipbox bg" x="1012" y="689" width="126" height="38"/>
+<text class="chiptext bg" x="1018" y="703">no entries →</text>
+<text class="chiptext bg" x="1018" y="718">error</text>
+<line class="rule" x1="0" y1="739" x2="1450" y2="739"/>
+<line class="track" x1="1075.0" y1="761" x2="1225.0" y2="761"/>
+<text class="feature" x="12" y="764">Keep extracted files private</text>
+<text class="feature" x="12" y="781">and removable</text>
+<text class="detail" x="12" y="798">no world-writable, setuid, ACLs or</text>
+<text class="detail" x="12" y="813">flags from the archive</text>
+<rect class="chipbox bg" x="1012" y="751" width="126" height="38"/>
+<text class="chiptext bg" x="1018" y="765">sanitizedPermis</text>
+<text class="chiptext bg" x="1018" y="780">sionsForEntry:</text>
+<rect class="chipbox bg" x="1012" y="794" width="126" height="53"/>
+<text class="chiptext bg" x="1018" y="808">no</text>
+<text class="chiptext bg" x="1018" y="823">EXTRACT_PERM,</text>
+<text class="chiptext bg" x="1018" y="838">ACL, FFLAGS</text>
+<rect class="chipbox bg" x="1162" y="751" width="126" height="38"/>
+<text class="chiptext bg" x="1168" y="765">7zz applies the</text>
+<text class="chiptext bg" x="1168" y="780">umask</text>
+<line class="rule" x1="0" y1="859" x2="1450" y2="859"/>
+<line class="track" x1="775.0" y1="881" x2="1075.0" y2="881"/>
+<text class="feature" x="12" y="884">Decompress a single .gz, .bz2</text>
+<text class="feature" x="12" y="901">or .xz</text>
+<text class="detail" x="12" y="918">plain.txt.gz → plain.txt</text>
+<rect class="chipbox main" x="712" y="871" width="126" height="38"/>
+<text class="chiptext main" x="718" y="885">dispatch_async</text>
+<text class="chiptext main" x="718" y="900">global queue</text>
+<rect class="chipbox bg" x="1012" y="871" width="126" height="38"/>
+<text class="chiptext bg" x="1018" y="885">raw format</text>
+<text class="chiptext bg" x="1018" y="900">behind a filter</text>
+<rect class="chipbox bg" x="1012" y="914" width="126" height="53"/>
+<text class="chiptext bg" x="1018" y="928">entry named</text>
+<text class="chiptext bg" x="1018" y="943">after the</text>
+<text class="chiptext bg" x="1018" y="958">archive</text>
+<line class="rule" x1="0" y1="979" x2="1450" y2="979"/>
+<line class="track" x1="775.0" y1="1001" x2="1225.0" y2="1001"/>
+<text class="feature" x="12" y="1004">Extract 7z</text>
+<text class="detail" x="12" y="1021">RAR is not given to 7zz: Homebrew</text>
+<text class="detail" x="12" y="1036">builds it without the RAR codec</text>
+<rect class="chipbox main" x="712" y="991" width="126" height="38"/>
+<text class="chiptext main" x="718" y="1005">dispatch_async</text>
+<text class="chiptext main" x="718" y="1020">global queue</text>
+<rect class="chipbox bg" x="1162" y="991" width="126" height="38"/>
+<text class="chiptext bg" x="1168" y="1005">NA7zExtractor :</text>
+<text class="chiptext bg" x="1168" y="1020">NA7zzExtractor</text>
+<rect class="chipbox bg" x="1162" y="1034" width="126" height="23"/>
+<text class="chiptext bg" x="1168" y="1048">NA7zzTool -t7z</text>
+<rect class="chipbox limit" x="1162" y="1062" width="126" height="53"/>
+<text class="chiptext limit" x="1168" y="1076">exit code 1</text>
+<text class="chiptext limit" x="1168" y="1091">treated as</text>
+<text class="chiptext limit" x="1168" y="1106">failure</text>
+<rect class="chipbox bg" x="1162" y="1120" width="126" height="68"/>
+<text class="chiptext bg" x="1168" y="1134">toolPath:</text>
+<text class="chiptext bg" x="1168" y="1149">Contents/Helper</text>
+<text class="chiptext bg" x="1168" y="1164">s/7zz first, ≥</text>
+<text class="chiptext bg" x="1168" y="1179">25.01</text>
+<line class="rule" x1="0" y1="1200" x2="1450" y2="1200"/>
+<line class="track" x1="1075.0" y1="1222" x2="1225.0" y2="1222"/>
+<text class="feature" x="12" y="1225">Keep files inside the output</text>
+<text class="feature" x="12" y="1242">folder</text>
+<text class="detail" x="12" y="1259">no ../, no writes through symlinks</text>
+<rect class="chipbox bg" x="1012" y="1212" width="126" height="23"/>
+<text class="chiptext bg" x="1018" y="1226">SECURE_NODOTDOT</text>
+<rect class="chipbox bg" x="1012" y="1240" width="126" height="23"/>
+<text class="chiptext bg" x="1018" y="1254">SECURE_SYMLINKS</text>
+<rect class="chipbox bg" x="1012" y="1268" width="126" height="23"/>
+<text class="chiptext bg" x="1018" y="1282">rebaseEntry:</text>
+<rect class="chipbox bg" x="1162" y="1212" width="126" height="68"/>
+<text class="chiptext bg" x="1168" y="1226">7zz refuses</text>
+<text class="chiptext bg" x="1168" y="1241">outside</text>
+<text class="chiptext bg" x="1168" y="1256">symlinks (exit</text>
+<text class="chiptext bg" x="1168" y="1271">2)</text>
+<rect class="chipbox gap" x="1162" y="1285" width="126" height="38"/>
+<text class="chiptext gap" x="1168" y="1299">../ entries</text>
+<text class="chiptext gap" x="1168" y="1314">untested</text>
+<line class="rule" x1="0" y1="1335" x2="1450" y2="1335"/>
+<text class="feature" x="12" y="1360">Create a new output folder</text>
+<text class="detail" x="12" y="1377">hidden staging, then name, name 2…;</text>
+<text class="detail" x="12" y="1392">removed on failure</text>
+<rect class="chipbox main" x="712" y="1347" width="126" height="53"/>
+<text class="chiptext main" x="718" y="1361">createStagingDi</text>
+<text class="chiptext main" x="718" y="1376">rectoryForArchi</text>
+<text class="chiptext main" x="718" y="1391">ve:error:</text>
+<rect class="chipbox main" x="712" y="1405" width="126" height="38"/>
+<text class="chiptext main" x="718" y="1419">moveStagingDire</text>
+<text class="chiptext main" x="718" y="1434">ctory:…</text>
+<rect class="chipbox main" x="712" y="1448" width="126" height="38"/>
+<text class="chiptext main" x="718" y="1462">renamex_np</text>
+<text class="chiptext main" x="718" y="1477">RENAME_EXCL</text>
+<rect class="chipbox main" x="712" y="1491" width="126" height="38"/>
+<text class="chiptext main" x="718" y="1505">failed output</text>
+<text class="chiptext main" x="718" y="1520">removed</text>
+<line class="rule" x1="0" y1="1541" x2="1450" y2="1541"/>
+<text class="feature" x="12" y="1566">Unwrap a single top-level</text>
+<text class="feature" x="12" y="1583">folder</text>
+<rect class="chipbox main" x="712" y="1553" width="126" height="53"/>
+<text class="chiptext main" x="718" y="1567">unwrapSingleIte</text>
+<text class="chiptext main" x="718" y="1582">mDirectoryAtURL</text>
+<text class="chiptext main" x="718" y="1597">:</text>
+<line class="rule" x1="0" y1="1618" x2="1450" y2="1618"/>
+<line class="track" x1="625.0" y1="1640" x2="1225.0" y2="1640"/>
+<text class="feature" x="12" y="1643">Show progress</text>
+<rect class="chipbox main" x="562" y="1630" width="126" height="38"/>
+<text class="chiptext main" x="568" y="1644">progress bar,</text>
+<text class="chiptext main" x="568" y="1659">status label</text>
+<rect class="chipbox main" x="712" y="1630" width="126" height="53"/>
+<text class="chiptext main" x="718" y="1644">NSProgress</text>
+<text class="chiptext main" x="718" y="1659">polled every</text>
+<text class="chiptext main" x="718" y="1674">0.1 s</text>
+<rect class="chipbox main" x="712" y="1688" width="126" height="23"/>
+<text class="chiptext main" x="718" y="1702">progressHandler</text>
+<rect class="chipbox bg" x="1012" y="1630" width="126" height="68"/>
+<text class="chiptext bg" x="1018" y="1644">completedUnitCo</text>
+<text class="chiptext bg" x="1018" y="1659">unt =</text>
+<text class="chiptext bg" x="1018" y="1674">archive_filter_</text>
+<text class="chiptext bg" x="1018" y="1689">bytes</text>
+<rect class="chipbox bg" x="1012" y="1703" width="126" height="38"/>
+<text class="chiptext bg" x="1018" y="1717">fileURL per</text>
+<text class="chiptext bg" x="1018" y="1732">entry</text>
+<rect class="chipbox bg" x="1162" y="1630" width="126" height="23"/>
+<text class="chiptext bg" x="1168" y="1644">7zz -bsp1</text>
+<rect class="chipbox bg" x="1162" y="1658" width="126" height="38"/>
+<text class="chiptext bg" x="1168" y="1672">NA7zzProgressPa</text>
+<text class="chiptext bg" x="1168" y="1687">rser → percent</text>
+<line class="rule" x1="0" y1="1753" x2="1450" y2="1753"/>
+<line class="track" x1="475.0" y1="1775" x2="775.0" y2="1775"/>
+<text class="feature" x="12" y="1778">Reveal in Finder, then quit</text>
+<rect class="chipbox main" x="412" y="1765" width="126" height="23"/>
+<text class="chiptext main" x="418" y="1779">terminateIfIdle</text>
+<rect class="chipbox main" x="562" y="1765" width="126" height="23"/>
+<text class="chiptext main" x="568" y="1779">jobDidFinish:</text>
+<rect class="chipbox main" x="562" y="1793" width="126" height="38"/>
+<text class="chiptext main" x="568" y="1807">extractionFinis</text>
+<text class="chiptext main" x="568" y="1822">hedAtURL:</text>
+<rect class="chipbox main" x="562" y="1836" width="126" height="68"/>
+<text class="chiptext main" x="568" y="1850">revealHandler →</text>
+<text class="chiptext main" x="568" y="1865">activateFileVie</text>
+<text class="chiptext main" x="568" y="1880">werSelectingURL</text>
+<text class="chiptext main" x="568" y="1895">s:</text>
+<rect class="chipbox main" x="712" y="1765" width="126" height="38"/>
+<text class="chiptext main" x="718" y="1779">Succeeded ·</text>
+<text class="chiptext main" x="718" y="1794">destinationURL</text>
+<line class="rule" x1="0" y1="1916" x2="1450" y2="1916"/>
+<line class="track" x1="325.0" y1="1938" x2="1225.0" y2="1938"/>
+<text class="feature" x="12" y="1941">Cancel, close or quit</text>
+<text class="feature" x="12" y="1958">mid-extraction</text>
+<text class="detail" x="12" y="1975">output removed before the window</text>
+<text class="detail" x="12" y="1990">closes</text>
+<rect class="chipbox" x="262" y="1928" width="126" height="23"/>
+<text class="chiptext" x="268" y="1942">⌘Q</text>
+<rect class="chipbox main" x="412" y="1928" width="126" height="38"/>
+<text class="chiptext main" x="418" y="1942">applicationShou</text>
+<text class="chiptext main" x="418" y="1957">ldTerminate:</text>
+<rect class="chipbox main" x="412" y="1971" width="126" height="38"/>
+<text class="chiptext main" x="418" y="1985">NSTerminateLate</text>
+<text class="chiptext main" x="418" y="2000">r</text>
+<rect class="chipbox main" x="562" y="1928" width="126" height="38"/>
+<text class="chiptext main" x="568" y="1942">cancelExtractio</text>
+<text class="chiptext main" x="568" y="1957">n: (Esc)</text>
+<rect class="chipbox main" x="562" y="1971" width="126" height="38"/>
+<text class="chiptext main" x="568" y="1985">windowShouldClo</text>
+<text class="chiptext main" x="568" y="2000">se:</text>
+<rect class="chipbox main" x="712" y="1928" width="126" height="53"/>
+<text class="chiptext main" x="718" y="1942">cancel →</text>
+<text class="chiptext main" x="718" y="1957">Cancelling →</text>
+<text class="chiptext main" x="718" y="1972">Cancelled</text>
+<rect class="chipbox main" x="712" y="1986" width="126" height="38"/>
+<text class="chiptext main" x="718" y="2000">-[NSProgress</text>
+<text class="chiptext main" x="718" y="2015">cancel]</text>
+<rect class="chipbox main" x="712" y="2029" width="126" height="38"/>
+<text class="chiptext main" x="718" y="2043">staging folder</text>
+<text class="chiptext main" x="718" y="2058">removed</text>
+<rect class="chipbox bg" x="1012" y="1928" width="126" height="38"/>
+<text class="chiptext bg" x="1018" y="1942">progress.isCanc</text>
+<text class="chiptext bg" x="1018" y="1957">elled per block</text>
+<rect class="chipbox bg" x="1162" y="1928" width="126" height="38"/>
+<text class="chiptext bg" x="1168" y="1942">progress.isCanc</text>
+<text class="chiptext bg" x="1168" y="1957">elled poll</text>
+<rect class="chipbox bg" x="1162" y="1971" width="126" height="38"/>
+<text class="chiptext bg" x="1168" y="1985">NSTask</text>
+<text class="chiptext bg" x="1168" y="2000">terminate</text>
+<line class="rule" x1="0" y1="2079" x2="1450" y2="2079"/>
+<line class="track" x1="625.0" y1="2101" x2="1225.0" y2="2101"/>
+<text class="feature" x="12" y="2104">Show errors</text>
+<text class="detail" x="12" y="2121">short summary; long output in</text>
+<text class="detail" x="12" y="2136">collapsed, scrollable details</text>
+<rect class="chipbox main" x="562" y="2091" width="126" height="38"/>
+<text class="chiptext main" x="568" y="2105">presentError:ti</text>
+<text class="chiptext main" x="568" y="2120">tle:</text>
+<rect class="chipbox main" x="562" y="2134" width="126" height="38"/>
+<text class="chiptext main" x="568" y="2148">NSAlert sheet +</text>
+<text class="chiptext main" x="568" y="2163">Show Details</text>
+<rect class="chipbox main" x="562" y="2177" width="126" height="38"/>
+<text class="chiptext main" x="568" y="2191">400×180 pt</text>
+<text class="chiptext main" x="568" y="2206">scroll view</text>
+<rect class="chipbox main" x="712" y="2091" width="126" height="23"/>
+<text class="chiptext main" x="718" y="2105">error property</text>
+<rect class="chipbox bg" x="1012" y="2091" width="126" height="38"/>
+<text class="chiptext bg" x="1018" y="2105">archive_error_s</text>
+<text class="chiptext bg" x="1018" y="2120">tring</text>
+<rect class="chipbox bg" x="1162" y="2091" width="126" height="53"/>
+<text class="chiptext bg" x="1168" y="2105">errorForStatus:</text>
+<text class="chiptext bg" x="1168" y="2120">stderrData:fall</text>
+<text class="chiptext bg" x="1168" y="2135">back:</text>
+<rect class="chipbox bg" x="1162" y="2149" width="126" height="38"/>
+<text class="chiptext bg" x="1168" y="2163">stderr as</text>
+<text class="chiptext bg" x="1168" y="2178">failure reason</text>
+<line class="rule" x1="0" y1="2227" x2="1450" y2="2227"/>
+<line class="track" x1="1075.0" y1="2249" x2="1225.0" y2="2249"/>
+<text class="feature" x="12" y="2252">List archive contents</text>
+<text class="detail" x="12" y="2269">protocol method; no caller in the</text>
+<text class="detail" x="12" y="2284">app</text>
+<rect class="chipbox bg" x="1012" y="2239" width="126" height="38"/>
+<text class="chiptext bg" x="1018" y="2253">contentsOfArchi</text>
+<text class="chiptext bg" x="1018" y="2268">veAtURL:error:</text>
+<rect class="chipbox bg" x="1162" y="2239" width="126" height="38"/>
+<text class="chiptext bg" x="1168" y="2253">7zz l -slt -p</text>
+<text class="chiptext bg" x="1168" y="2268">--</text>
+<rect class="chipbox bg" x="1162" y="2282" width="126" height="38"/>
+<text class="chiptext bg" x="1168" y="2296">members after</text>
+<text class="chiptext bg" x="1168" y="2311">----------</text>
+<line class="rule" x1="0" y1="2332" x2="1450" y2="2332"/>
+<line class="track" x1="475.0" y1="2354" x2="925.0" y2="2354"/>
+<text class="feature" x="12" y="2357">Load extractor plugins</text>
+<text class="detail" x="12" y="2374">skipped unless signed by an</text>
+<text class="detail" x="12" y="2389">Apple-issued certificate</text>
+<rect class="chipbox main" x="412" y="2344" width="126" height="53"/>
+<text class="chiptext main" x="418" y="2358">applicationWill</text>
+<text class="chiptext main" x="418" y="2373">FinishLaunching</text>
+<text class="chiptext main" x="418" y="2388">:</text>
+<rect class="chipbox main" x="412" y="2402" width="126" height="38"/>
+<text class="chiptext main" x="418" y="2416">pluginDirectory</text>
+<text class="chiptext main" x="418" y="2431">URLs</text>
+<rect class="chipbox main" x="862" y="2344" width="126" height="38"/>
+<text class="chiptext main" x="868" y="2358">+defaultPluginD</text>
+<text class="chiptext main" x="868" y="2373">irectoryURLs</text>
+<rect class="chipbox main" x="862" y="2387" width="126" height="38"/>
+<text class="chiptext main" x="868" y="2401">loadPluginsFrom</text>
+<text class="chiptext main" x="868" y="2416">DirectoryURLs:</text>
+<rect class="chipbox main" x="862" y="2430" width="126" height="38"/>
+<text class="chiptext main" x="868" y="2444">isTrustedPlugin</text>
+<text class="chiptext main" x="868" y="2459">AtURL:error:</text>
+<rect class="chipbox main" x="862" y="2473" width="126" height="38"/>
+<text class="chiptext main" x="868" y="2487">anchor apple</text>
+<text class="chiptext main" x="868" y="2502">generic</text>
+<rect class="chipbox main" x="862" y="2516" width="126" height="38"/>
+<text class="chiptext main" x="868" y="2530">NAExtractorPlug</text>
+<text class="chiptext main" x="868" y="2545">in</text>
+<line class="rule" x1="0" y1="2566" x2="1450" y2="2566"/>
+<line class="track" x1="625.0" y1="2588" x2="1225.0" y2="2588"/>
+<text class="feature" x="12" y="2591">Stop before the disk fills</text>
+<text class="detail" x="12" y="2608">free space below min(1 GB, 5%)</text>
+<rect class="chipbox main" x="562" y="2578" width="126" height="23"/>
+<text class="chiptext main" x="568" y="2592">error sheet</text>
+<rect class="chipbox main" x="712" y="2578" width="126" height="23"/>
+<text class="chiptext main" x="718" y="2592">startMonitor</text>
+<rect class="chipbox main" x="712" y="2606" width="126" height="38"/>
+<text class="chiptext main" x="718" y="2620">statfs every</text>
+<text class="chiptext main" x="718" y="2635">0.1 s</text>
+<rect class="chipbox main" x="712" y="2649" width="126" height="38"/>
+<text class="chiptext main" x="718" y="2663">cancel +</text>
+<text class="chiptext main" x="718" y="2678">stopError</text>
+<rect class="chipbox bg" x="1012" y="2578" width="126" height="38"/>
+<text class="chiptext bg" x="1018" y="2592">progress.isCanc</text>
+<text class="chiptext bg" x="1018" y="2607">elled</text>
+<rect class="chipbox bg" x="1162" y="2578" width="126" height="53"/>
+<text class="chiptext bg" x="1168" y="2592">progress.isCanc</text>
+<text class="chiptext bg" x="1168" y="2607">elled →</text>
+<text class="chiptext bg" x="1168" y="2622">terminate</text>
+<line class="rule" x1="0" y1="2699" x2="1450" y2="2699"/>
+<line class="track" x1="325.0" y1="2721" x2="775.0" y2="2721"/>
+<text class="feature" x="12" y="2724">Keep running during extraction</text>
+<text class="detail" x="12" y="2741">no App Nap, sudden or automatic</text>
+<text class="detail" x="12" y="2756">termination</text>
+<rect class="chipbox" x="262" y="2711" width="126" height="53"/>
+<text class="chiptext" x="268" y="2725">no</text>
+<text class="chiptext" x="268" y="2740">NSSupportsAutom</text>
+<text class="chiptext" x="268" y="2755">aticTermination</text>
+<rect class="chipbox main" x="712" y="2711" width="126" height="38"/>
+<text class="chiptext main" x="718" y="2725">held while</text>
+<text class="chiptext main" x="718" y="2740">isActive</text>
+<rect class="chipbox main" x="712" y="2754" width="126" height="38"/>
+<text class="chiptext main" x="718" y="2768">NSProcessInfo</text>
+<text class="chiptext main" x="718" y="2783">beginActivity…</text>
+<line class="rule" x1="0" y1="2804" x2="1450" y2="2804"/>
+<text class="feature" x="12" y="2829">Mark extracted files as</text>
+<text class="feature" x="12" y="2846">downloaded</text>
+<text class="detail" x="12" y="2863">copies the archive's</text>
+<text class="detail" x="12" y="2878">com.apple.quarantine</text>
+<rect class="chipbox main" x="712" y="2816" width="126" height="68"/>
+<text class="chiptext main" x="718" y="2830">NAQuarantine</text>
+<text class="chiptext main" x="718" y="2845">copyQuarantineF</text>
+<text class="chiptext main" x="718" y="2860">romURL:toTreeAt</text>
+<text class="chiptext main" x="718" y="2875">URL:error:</text>
+<rect class="chipbox main" x="712" y="2889" width="126" height="68"/>
+<text class="chiptext main" x="718" y="2903">openat</text>
+<text class="chiptext main" x="718" y="2918">O_NOFOLLOW,</text>
+<text class="chiptext main" x="718" y="2933">fsetxattr,</text>
+<text class="chiptext main" x="718" y="2948">fchmod</text>
+<rect class="chipbox main" x="712" y="2962" width="126" height="53"/>
+<text class="chiptext main" x="718" y="2976">before rename,</text>
+<text class="chiptext main" x="718" y="2991">also on failure</text>
+<text class="chiptext main" x="718" y="3006">and cancel</text>
+<line class="rule" x1="0" y1="3027" x2="1450" y2="3027"/>
+<text class="feature" x="12" y="3052">Build, sign, install</text>
+<text class="detail" x="12" y="3069">hardened runtime, no Homebrew code</text>
+<text class="detail" x="12" y="3084">at runtime</text>
+<rect class="chipbox" x="1312" y="3039" width="126" height="53"/>
+<text class="chiptext" x="1318" y="3053">static</text>
+<text class="chiptext" x="1318" y="3068">libarchive.a</text>
+<text class="chiptext" x="1318" y="3083">and deps</text>
+<rect class="chipbox" x="1312" y="3097" width="126" height="53"/>
+<text class="chiptext" x="1318" y="3111">7zz →</text>
+<text class="chiptext" x="1318" y="3126">Contents/Helper</text>
+<text class="chiptext" x="1318" y="3141">s</text>
+<rect class="chipbox" x="1312" y="3155" width="126" height="53"/>
+<text class="chiptext" x="1318" y="3169">codesign</text>
+<text class="chiptext" x="1318" y="3184">--options</text>
+<text class="chiptext" x="1318" y="3199">runtime</text>
+<rect class="chipbox" x="1312" y="3213" width="126" height="38"/>
+<text class="chiptext" x="1318" y="3227">make</text>
+<text class="chiptext" x="1318" y="3242">verify-bundle</text>
+<rect class="chipbox" x="1312" y="3256" width="126" height="38"/>
+<text class="chiptext" x="1318" y="3270">make strings →</text>
+<text class="chiptext" x="1318" y="3285">en.lproj</text>
+<rect class="chipbox" x="1312" y="3299" width="126" height="38"/>
+<text class="chiptext" x="1318" y="3313">rsvg-convert →</text>
+<text class="chiptext" x="1318" y="3328">iconutil</text>
+<rect class="chipbox" x="1312" y="3342" width="126" height="53"/>
+<text class="chiptext" x="1318" y="3356">make install</text>
+<text class="chiptext" x="1318" y="3371">(ditto,</text>
+<text class="chiptext" x="1318" y="3386">replaces)</text>
+<rect class="chipbox" x="1312" y="3400" width="126" height="23"/>
+<text class="chiptext" x="1318" y="3414">make test</text>
+<rect class="chipbox" x="1312" y="3428" width="126" height="38"/>
+<text class="chiptext" x="1318" y="3442">-MMD -MP</text>
+<text class="chiptext" x="1318" y="3457">dependencies</text>
+<rect class="chipbox gap" x="1312" y="3471" width="126" height="53"/>
+<text class="chiptext gap" x="1318" y="3485">static libs</text>
+<text class="chiptext gap" x="1318" y="3500">built for macOS</text>
+<text class="chiptext gap" x="1318" y="3515">26, target 13.0</text>
+</svg>
